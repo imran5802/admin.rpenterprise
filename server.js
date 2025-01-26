@@ -4,7 +4,9 @@ const cors = require('cors');
 const app = express();
 
 // Enable CORS for all routes
-app.use(cors());
+app.use(cors({
+    origin: 'http://localhost:3000'
+}));
 
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'public')));

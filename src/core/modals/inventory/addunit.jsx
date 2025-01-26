@@ -1,72 +1,103 @@
-import React from 'react'
-import { Link } from 'react-router-dom'
+import React, { useState } from 'react';
+import PropTypes from 'prop-types';
 
-const AddUnit = () => {
+const AddUnit = ({ show, onHide, onSubmit }) => {
+    const [unitName, setUnitName] = useState('');
+    const [message, setMessage] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            const response = await fetch('http://localhost:3006/api/units', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ unitName }),
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                setMessage('Unit added successfully!');
+                setUnitName('');
+                // Safely call onSubmit if it exists
+                if (typeof onSubmit === 'function') {
+                    try {
+                        onSubmit(data.unit);
+                    } catch (error) {
+                        console.error('Error in onSubmit handler:', error);
+                    }
+                }
+                // Clear message and close modal after 2 seconds
+                setTimeout(() => {
+                    setMessage('');
+                    onHide();
+                }, 2000);
+            } else {
+                setMessage('Error: ' + (data.error || 'Failed to add unit'));
+            }
+        } catch (error) {
+            setMessage('Error: Could not connect to server');
+            console.error('Server connection error:', error);
+        }
+    };
+
+    if (!show) return null;
+
     return (
-        <div>
-            {/* Add Unit */}
-            <div className="modal fade" id="add-units">
-                <div className="modal-dialog modal-dialog-centered custom-modal-two">
-                    <div className="modal-content">
-                        <div className="page-wrapper-new p-0">
-                            <div className="content">
-                                <div className="modal-header border-0 custom-modal-header">
-                                    <div className="page-title">
-                                        <h4>Create Unit</h4>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        className="close"
-                                        data-bs-dismiss="modal"
-                                        aria-label="Close"
-                                    >
-                                        <span aria-hidden="true">×</span>
-                                    </button>
-                                </div>
-                                <div className="modal-body custom-modal-body">
-                                    <form>
-                                        <div className="mb-3">
-                                            <label className="form-label">Name</label>
-                                            <input type="text" className="form-control" />
-                                        </div>
-                                        <div className="mb-3">
-                                            <label className="form-label">Short Name</label>
-                                            <input type="text" className="form-control" />
-                                        </div>
-                                        <div className="mb-0">
-                                            <div className="status-toggle modal-status d-flex justify-content-between align-items-center">
-                                                <span className="status-label">Status</span>
-                                                <input
-                                                    type="checkbox"
-                                                    id="user2"
-                                                    className="check"
-                                                    defaultChecked="true"
-                                                />
-                                                <label htmlFor="user2" className="checktoggle" />
-                                            </div>
-                                        </div>
-                                        <div className="modal-footer-btn">
-                                            <button
-                                                type="button"
-                                                className="btn btn-cancel me-2"
-                                                data-bs-dismiss="modal"
-                                            >
-                                                Cancel
-                                            </button>
-                                            <Link  to="#" className="btn btn-submit">
-                                                Create Unit
-                                            </Link>
-                                        </div>
-                                    </form>
-                                </div>
+        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <div className="modal-dialog modal-dialog-centered">
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h4>Create Unit</h4>
+                        <button
+                            type="button"
+                            className="btn-close"
+                            onClick={onHide}
+                        />
+                    </div>
+                    <div className="modal-body">
+                        {message && (
+                            <div className={`alert ${message.includes('Error') ? 'alert-danger' : 'alert-success'}`}>
+                                {message}
                             </div>
-                        </div>
+                        )}
+                        <form onSubmit={handleSubmit}>
+                            <div className="mb-3">
+                                <label className="form-label">Unit Name</label>
+                                <input 
+                                    type="text" 
+                                    className="form-control"
+                                    value={unitName}
+                                    onChange={(e) => setUnitName(e.target.value)}
+                                    required 
+                                />
+                            </div>
+                            <div className="modal-footer border-0">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={onHide}
+                                >
+                                    Cancel
+                                </button>
+                                <button type="submit" className="btn btn-primary">
+                                    Create Unit
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </div>
-            {/* /Add Unit */}
         </div>
-    )
-}
+    );
+};
 
-export default AddUnit
+AddUnit.propTypes = {
+    show: PropTypes.bool.isRequired,
+    onHide: PropTypes.func.isRequired,
+    onSubmit: PropTypes.func // Make onSubmit optional
+};
+
+export default AddUnit;

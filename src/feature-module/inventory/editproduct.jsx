@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import MySwal from 'sweetalert2';
@@ -21,6 +21,8 @@ const EditProduct = () => {
     imageUrl: '',
     searchTag: '',
   });
+  const fileInputRef = useRef(null);
+  const [previewImage, setPreviewImage] = useState(null);
 
   useEffect(() => {
     console.log('EditProduct mounted, id:', id);
@@ -31,26 +33,21 @@ const EditProduct = () => {
     try {
       setLoading(true);
       setError(null);
-      console.log('Fetching product details for id:', id);
       
-      const response = await fetch(`https://rpbazaar.xyz/api/get_product.php?id=${id}`);
-      console.log('Raw response:', response);
-      
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/product_details/${id}`);
+        
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const data = await response.json();
-      console.log('Received data:', data);
       
       if (data.success && data.product) {
         setFormData(data.product);
       } else {
-        console.error('API returned success: false or missing product data:', data);
         setError(data.message || 'Failed to fetch product details');
       }
     } catch (error) {
-      console.error('Error in fetchProductDetails:', error);
       setError(`Error fetching product details: ${error.message}`);
     } finally {
       setLoading(false);
@@ -65,37 +62,14 @@ const EditProduct = () => {
     }));
   };
 
-  const handleImageUpload = async (e) => {
+  const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    const newFileName = `product_${id}${file.name.substring(file.name.lastIndexOf('.'))}`;
-    formData.append('file', file, newFileName);
-
-    try {
-      const response = await axios.post('/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-
-      if (response.status === 200) {
-        const imageUrl = `/assets/img/${newFileName}`;
-        setFormData(prev => ({
-          ...prev,
-          imageUrl
-        }));
-      } else {
-        throw new Error('Failed to upload image');
-      }
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      MySwal.fire({
-        icon: 'error',
-        title: 'Error!',
-        text: 'Failed to upload image'
-      });
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviewImage(reader.result);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -104,45 +78,67 @@ const EditProduct = () => {
     try {
       setLoading(true);
       setError(null);
-      console.log('Submitting update for id:', id, 'with data:', formData);
 
-      const response = await fetch('https://rpbazaar.xyz/api/update_product.php', {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          productID: id,
-          ...formData
-        })
+      const cleanFormData = {};
+      Object.keys(formData).forEach(key => {
+        if (formData[key] !== undefined && formData[key] !== '') {
+          cleanFormData[key] = formData[key];
+        }
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const formDataToSend = new FormData();
+      
+      // Append clean form data
+      Object.keys(cleanFormData).forEach(key => {
+        formDataToSend.append(key, cleanFormData[key]);
+      });
+
+      // Handle file upload with custom filename
+      if (fileInputRef.current.files[0]) {
+        const file = fileInputRef.current.files[0];
+        // Create a safe filename using product name
+        const safeProductName = cleanFormData.productEnName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const extension = file.name.split('.').pop();
+        const newFileName = `product_${safeProductName}.${extension}`;
+        
+        // Create a new File object with the custom filename
+        const renamedFile = new File([file], newFileName, { type: file.type });
+        formDataToSend.append('file', renamedFile);
       }
 
-      const data = await response.json();
-      console.log('Update response:', data);
+      const response = await axios.put(
+        `${process.env.REACT_APP_API_BASE_URL}/api/update_product/${id}`, 
+        formDataToSend,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      );
 
-      if (data.success) {
-        MySwal.fire({
+      console.log('Server response:', response.data);
+
+      if (response.data.success) {
+        await MySwal.fire({
           icon: 'success',
           title: 'Success!',
           text: 'Product updated successfully',
-          showConfirmButton: false,
-          timer: 1500
+          showConfirmButton: true,
+          confirmButtonText: 'OK',
+          timer: 2000,
+          timerProgressBar: true
         });
         navigate('/product-list');
       } else {
-        throw new Error(data.message || 'Failed to update product');
+        throw new Error(response.data.message || 'Failed to update product');
       }
     } catch (error) {
-      console.error('Error in handleSubmit:', error);
-      MySwal.fire({
+      console.error('Error details:', error.response?.data || error);
+      await MySwal.fire({
         icon: 'error',
         title: 'Error!',
-        text: error.message || 'Failed to update product'
+        text: error.response?.data?.error || error.message || 'Failed to update product',
+        showConfirmButton: true
       });
     } finally {
       setLoading(false);
@@ -174,7 +170,7 @@ const EditProduct = () => {
               <button className="btn btn-primary me-2" onClick={fetchProductDetails}>
                 Retry
               </button>
-              <button className="btn btn-secondary" onClick={() => navigate('/productlist')}>
+              <button className="btn btn-secondary" onClick={() => navigate('/product-list')}>
                 Back to Product List
               </button>
             </div>
@@ -301,19 +297,58 @@ const EditProduct = () => {
                 </div>
                 <div className="col-lg-6 col-sm-6 col-12">
                   <div className="form-group">
-                    <label>Image URL</label>
+                    <label>Product Image</label>
                     <input
                       type="text"
-                      className="form-control"
+                      className="form-control mb-2"
                       name="imageUrl"
                       value={formData.imageUrl}
-                      onChange={handleInputChange}
+                      readOnly
                     />
-                    <input
-                      type="file"
-                      className="form-control mt-2"
-                      onChange={handleImageUpload}
-                    />
+                    <div className="image-preview mb-2">
+                      {(previewImage || formData.imageUrl) && (
+                        <div className="position-relative" style={{ maxWidth: '200px' }}>
+                          <img
+                            src={previewImage || formData.imageUrl}
+                            alt="Product"
+                            className="img-fluid rounded"
+                            style={{
+                              width: '100%',
+                              height: '200px',
+                              objectFit: 'cover',
+                              border: '1px solid #ddd'
+                            }}
+                          />
+                          {previewImage && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-danger position-absolute"
+                              style={{ top: '5px', right: '5px' }}
+                              onClick={() => {
+                                setPreviewImage(null);
+                                if (fileInputRef.current) {
+                                  fileInputRef.current.value = '';
+                                }
+                              }}
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="custom-file">
+                      <input
+                        type="file"
+                        className="form-control"
+                        ref={fileInputRef}
+                        onChange={handleImageChange}
+                        accept="image/*"
+                      />
+                      <small className="form-text text-muted">
+                        Select a new image to update the current one
+                      </small>
+                    </div>
                   </div>
                 </div>
                 {/* Add other form fields as needed */}

@@ -117,7 +117,7 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await fetch('https://rpbazaar.xyz/api/get_all_product.php', {
+        const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/products`, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
