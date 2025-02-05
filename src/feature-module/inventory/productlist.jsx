@@ -300,14 +300,14 @@ const ProductList = () => {
             </div>
           </div>
           <ul className="table-top-head">
-            <li>
+            <li key="pdf">
               <OverlayTrigger placement="top" overlay={renderTooltip}>
                 <Link>
                   <ImageWithBasePath src="assets/img/icons/pdf.svg" alt="img" />
                 </Link>
               </OverlayTrigger>
             </li>
-            <li>
+            <li key="excel">
               <OverlayTrigger placement="top" overlay={renderExcelTooltip}>
                 <Link data-bs-toggle="tooltip" data-bs-placement="top">
                   <ImageWithBasePath
@@ -317,21 +317,21 @@ const ProductList = () => {
                 </Link>
               </OverlayTrigger>
             </li>
-            <li>
+            <li key="printer">
               <OverlayTrigger placement="top" overlay={renderPrinterTooltip}>
                 <Link data-bs-toggle="tooltip" data-bs-placement="top">
                   <i data-feather="printer" className="feather-printer" />
                 </Link>
               </OverlayTrigger>
             </li>
-            <li>
+            <li key="refresh">
               <OverlayTrigger placement="top" overlay={renderRefreshTooltip}>
                 <Link data-bs-toggle="tooltip" data-bs-placement="top">
                   <RotateCcw />
                 </Link>
               </OverlayTrigger>
             </li>
-            <li>
+            <li key="collapse">
               <OverlayTrigger placement="top" overlay={renderCollapseTooltip}>
                 <Link
                   data-bs-toggle="tooltip"
@@ -417,8 +417,14 @@ const ProductList = () => {
                 <div className="table-responsive">
                   <Table 
                     columns={columns} 
-                    dataSource={filteredProducts}
+                    dataSource={filteredProducts.map(product => ({ ...product, key: product.productID }))}
                     loading={loading}
+                    rowKey={(record) => record.productID}
+                    bordered={true}
+                    sticky={true}
+                    pagination={true}
+                    size="middle"
+                    rowSelection={false}
                   />
                 </div>
               </>
@@ -428,7 +434,7 @@ const ProductList = () => {
         {/* /product list */}
         <Brand />
         <AddProduct 
-          show={showAddProduct}
+          show={showAddProduct} // Ensure show prop is always defined
           onHide={() => setShowAddProduct(false)}
           onSubmit={handleAddProduct}
         />

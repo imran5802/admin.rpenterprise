@@ -2,7 +2,7 @@ import React from "react";
 import { Route, Navigate } from "react-router-dom";
 import ProductList from "../feature-module/inventory/productlist";
 import Dashboard from "../feature-module/dashboard/Dashboard";
-import AddProduct from "../feature-module/inventory/addproduct";
+// import AddProduct from "../feature-module/inventory/addproduct";
 import SalesDashbaord from "../feature-module/dashboard/salesdashbaord";
 import BrandList from "../feature-module/inventory/brandlist";
 import VariantAttributes from "../feature-module/inventory/variantattributes";
@@ -124,7 +124,7 @@ import StockTransfer from "../feature-module/stock/stockTransfer";
 import SalesReport from "../feature-module/Reports/salesreport";
 import PurchaseReport from "../feature-module/Reports/purchasereport";
 import InventoryReport from "../feature-module/Reports/inventoryreport";
-import Invoicereport from "../feature-module/Reports/invoicereport";
+// import Invoicereport from "../feature-module/Reports/invoicereport";
 import SupplierReport from "../feature-module/Reports/supplierreport";
 import CustomerReport from "../feature-module/Reports/customerreport";
 import ExpenseReport from "../feature-module/Reports/expensereport";
@@ -193,6 +193,11 @@ import TaxRates from "../feature-module/settings/financialsettings/taxrates";
 import CurrencySettings from "../feature-module/settings/financialsettings/currencysettings";
 import WareHouses from "../core/modals/peoples/warehouses";
 import Coupons from "../feature-module/coupons/coupons";
+
+// My imports
+import PaymentHistory from "../feature-module/sales/paymenthistory";
+
+
 import { all_routes } from "./all_routes";
 export const publicRoutes = [
   {
@@ -209,13 +214,13 @@ export const publicRoutes = [
     element: <ProductList />,
     route: Route,
   },
-  {
-    id: 3,
-    path: routes.addproduct,
-    name: "products",
-    element: <AddProduct />,
-    route: Route,
-  },
+  // {
+  //   id: 3,
+  //   path: routes.addproduct,
+  //   name: "products",
+  //   element: <AddProduct />,
+  //   route: Route,
+  // },
   {
     id: 4,
     path: routes.salesdashboard,
@@ -1055,7 +1060,7 @@ export const publicRoutes = [
     id: 122,
     path: routes.invoicereport,
     name: "invoicereport",
-    element: <Invoicereport />,
+    element: <InvoiceReport />,
     route: Route,
   },
   {
@@ -1191,13 +1196,13 @@ export const publicRoutes = [
     element: <CurrencySettings />,
     route: Route,
   },
-  {
-    id: 142,
-    path: routes.pos,
-    name: "pos",
-    element: <Pos />,
-    route: Route,
-  },
+  // {
+  //   id: 142,
+  //   path: routes.pos,
+  //   name: "pos",
+  //   element: <Pos />,
+  //   route: Route,
+  // },
   {
     id: 143,
     path: routes.attendanceadmin,
@@ -1219,13 +1224,13 @@ export const publicRoutes = [
     element: <SalesList />,
     route: Route,
   },
-  {
-    id: 146,
-    path: routes.invoicereport,
-    name: "invoicereport",
-    element: <InvoiceReport />,
-    route: Route,
-  },
+  // {
+  //   id: 14-6,
+  //   path: routes.invoicereport,
+  //   name: "invoicereport",
+  //   element: <InvoiceReport />,
+  //   route: Route,
+  // },
   {
     id: 147,
     path: routes.holidays,
@@ -1373,13 +1378,20 @@ export const publicRoutes = [
     element: <Navigate to="/" />,
     route: Route,
   },
-  // {
-  //   id: 168,
-  //   path: "*",
-  //   name: "NotFound",
-  //   element: <Navigate to="/" />,
-  //   route: Route,
-  // },
+  {
+    id: 168,
+    path: "*",
+    name: "NotFound",
+    element: <Navigate to="/" />,
+    route: Route,
+  },
+  {
+    id: 169,
+    path: routes.paymenthistory,
+    name: "paymenthistory",
+    element: <PaymentHistory />,
+    route: Route,
+  },
 ];
 export const posRoutes = [
   {

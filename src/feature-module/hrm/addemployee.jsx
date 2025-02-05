@@ -1,16 +1,16 @@
-import { DatePicker } from "antd";
 import { ChevronUp, Info } from "feather-icons-react/build/IconComponents";
 import ArrowLeft from "feather-icons-react/build/IconComponents/ArrowLeft";
 import React, { useState } from "react";
-import { PlusCircle } from "react-feather";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Select from "react-select";
 import { all_routes } from "../../Router/all_routes";
 import { useDispatch, useSelector } from "react-redux";
 import { OverlayTrigger, Tooltip } from "react-bootstrap";
 import { setToogleHeader } from "../../core/redux/action";
+import axios from "axios";
 
 const AddEmployee = () => {
+  const navigate = useNavigate();
   const route = all_routes;
   const dispatch = useDispatch();
   const data = useSelector((state) => state.toggle_header);
@@ -20,14 +20,7 @@ const AddEmployee = () => {
       Collapse
     </Tooltip>
   );
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const handleDateChange = (date) => {
-    setSelectedDate(date);
-  };
-  const [selectedDate1, setSelectedDate1] = useState(new Date());
-  const handleDateChange1 = (date) => {
-    setSelectedDate1(date);
-  };
+
   const [showPassword, setShowPassword] = useState(false);
 
   const handleTogglePassword = () => {
@@ -37,48 +30,82 @@ const AddEmployee = () => {
   const handleToggleConfirmPassword = () => {
     setConfirmPassword((prevShowPassword) => !prevShowPassword);
   };
-  const gender = [
-    { value: "Choose", label: "Choose" },
-    { value: "Male", label: "Male" },
-    { value: "Female", label: "Female" },
-  ];
-  const nationality = [
-    { value: "Choose", label: "Choose" },
-    { value: "United Kingdom", label: "United Kingdom" },
-    { value: "India", label: "India" },
-  ];
-  const types = [
-    { value: "Choose", label: "Choose" },
-    { value: "Regular", label: "Regular" },
-  ];
-  const departments = [
-    { value: "Choose", label: "Choose" },
-    { value: "UI/UX", label: "UI/UX" },
-    { value: "Support", label: "Support" },
-    { value: "HR", label: "HR" },
-    { value: "Engineering", label: "Engineering" },
-  ];
+
   const designation = [
-    { value: "Choose", label: "Choose" },
-    { value: "Designer", label: "Designer" },
-    { value: "Developer", label: "Developer" },
-    { value: "Tester", label: "Tester" },
+    { value: "Super Admin", label: "Super Admin" },
+    { value: "Admin", label: "Admin" },
+    { value: "Manager", label: "Manager" },
+    { value: "Delivery Man", label: "Delivery Man" },
   ];
-  const bloodgroup = [
-    { value: "Select", label: "Select" },
-    { value: "A+", label: "A+" },
-    { value: "A-", label: "A-" },
-    { value: "B+", label: "B-" },
-    { value: "O+", label: "O-" },
-    { value: "O+", label: "O-" },
-    { value: "AB+", label: "AB-" },
-    { value: "AB+", label: "AB-" },
-  ];
-  const country = [
-    { value: "Choose", label: "Choose" },
-    { value: "United Kingdom", label: "United Kingdom" },
-    { value: "USA", label: "USA" },
-  ];
+
+  const [formData, setFormData] = useState({
+    name: '',
+    address: '',
+    email: '',
+    mobile: '',
+    designation: '',
+    loginName: '',
+    loginPassword: '',
+    confirmPassword: '',
+    status: 'Active',
+    joinDate: new Date().toISOString().split('T')[0]
+  });
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSelectChange = (selectedOption) => {
+    setFormData(prev => ({
+      ...prev,
+      designation: selectedOption.value
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    // Basic validation
+    if (!formData.name || !formData.mobile || !formData.designation) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    if (formData.loginPassword !== formData.confirmPassword) {
+      alert('Passwords do not match');
+      return;
+    }
+
+    try {
+      const response = await axios.post('http://localhost:3006/api/employees', {
+        name: formData.name,
+        address: formData.address,
+        mobile: formData.mobile,
+        email: formData.email,
+        status: formData.status,
+        designation: formData.designation,
+        joinDate: formData.joinDate,
+        loginName: formData.loginName || formData.email,
+        loginPassword: formData.loginPassword
+      });
+
+      if (response.data.success) {
+        alert('Employee added successfully');
+        navigate(route.employeegrid);
+      }
+    } catch (error) {
+      console.error('Error adding employee:', error);
+      alert('Error adding employee. Please try again.');
+    }
+  };
+
+  const handleCancel = () => {
+    navigate(route.employeegrid);
+  };
 
   return (
     <div>
@@ -118,7 +145,7 @@ const AddEmployee = () => {
             </ul>
           </div>
           {/* /product list */}
-          <form>
+          <form onSubmit={handleSubmit}>
             <div className="card">
               <div className="card-body">
                 <div className="new-employee-field">
@@ -130,226 +157,71 @@ const AddEmployee = () => {
                       Employee Information
                     </h6>
                   </div>
-                  <div className="profile-pic-upload">
-                    <div className="profile-pic">
-                      <span>
-                        <PlusCircle className="plus-down-add" />
-                        Profile Photo
-                      </span>
-                    </div>
-                    <div className="input-blocks mb-0">
-                      <div className="image-upload mb-0">
-                        <input type="file" />
-                        <div className="image-uploads">
-                          <h4>Change Image</h4>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                   <div className="row">
                     <div className="col-lg-4 col-md-6">
                       <div className="mb-3">
-                        <label className="form-label">First Name</label>
-                        <input type="text" className="form-control" />
+                        <label className="form-label">Display Name</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          name="name"
+                          value={formData.name}
+                          onChange={handleInputChange}
+                          required
+                        />
                       </div>
                     </div>
                     <div className="col-lg-4 col-md-6">
                       <div className="mb-3">
-                        <label className="form-label">Last Name</label>
-                        <input type="text" className="form-control" />
+                        <label className="form-label">Address</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          name="address"
+                          value={formData.address}
+                          onChange={handleInputChange}
+                        />
                       </div>
                     </div>
                     <div className="col-lg-4 col-md-6">
                       <div className="mb-3">
                         <label className="form-label">Email</label>
-                        <input type="email" className="form-control" />
+                        <input
+                          type="email"
+                          className="form-control"
+                          name="email"
+                          value={formData.email}
+                          onChange={handleInputChange}
+                        />
                       </div>
                     </div>
                     <div className="col-lg-4 col-md-6">
                       <div className="mb-3">
                         <label className="form-label">Contact Number</label>
-                        <input type="text" className="form-control" />
-                      </div>
-                    </div>
-                    <div className="col-lg-4 col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">Emp Code</label>
-                        <input type="text" className="form-control" />
-                      </div>
-                    </div>
-                    <div className="col-lg-4 col-md-6">
-                      <div className="input-blocks">
-                        <label>Date of Birth</label>
-                        <div className="input-groupicon calender-input">
-                          <DatePicker
-                            selected={selectedDate}
-                            onChange={handleDateChange}
-                            type="date"
-                            className="filterdatepicker"
-                            dateFormat="dd-MM-yyyy"
-                            placeholder="Choose Date"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-lg-4 col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">Gender</label>
-
-                        <Select
-                          className="select"
-                          options={gender}
-                          placeholder="Choose"
-                        />
-                      </div>
-                    </div>
-                    <div className="col-lg-4 col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">Nationality</label>
-
-                        <Select
-                          className="select"
-                          options={nationality}
-                          placeholder="Choose"
-                        />
-                      </div>
-                    </div>
-                    <div className="col-lg-4 col-md-6">
-                      <div className="input-blocks">
-                        <label>Joining Date</label>
-                        <div className="input-groupicon calender-input">
-                          <DatePicker
-                            selected={selectedDate1}
-                            onChange={handleDateChange1}
-                            type="date"
-                            className="filterdatepicker"
-                            dateFormat="dd-MM-yyyy"
-                            placeholder="Choose Date"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-lg-4 col-md-6">
-                      <div className="mb-3">
-                        <div className="add-newplus">
-                          <label className="form-label">Shift</label>
-                          <Link to="#">
-                            <span>
-                              <PlusCircle className="plus-down-add" />
-                              Add new
-                            </span>
-                          </Link>
-                        </div>
-
-                        <Select
-                          className="select"
-                          options={types}
-                          placeholder="Choose"
-                        />
-                      </div>
-                    </div>
-                    <div className="col-lg-4 col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">Department</label>
-
-                        <Select
-                          className="select"
-                          options={departments}
-                          placeholder="Choose"
+                        <input
+                          type="text"
+                          className="form-control"
+                          name="mobile"
+                          value={formData.mobile}
+                          onChange={handleInputChange}
+                          required
                         />
                       </div>
                     </div>
                     <div className="col-lg-4 col-md-6">
                       <div className="mb-3">
                         <label className="form-label">Designation</label>
-
                         <Select
                           className="select"
                           options={designation}
                           placeholder="Choose"
+                          onChange={handleSelectChange}
+                          required
                         />
-                      </div>
-                    </div>
-                    <div className="col-lg-4 col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">Blood Group</label>
-                        <Select
-                          className="select"
-                          options={bloodgroup}
-                          placeholder="Choose"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="other-info">
-                    <div className="card-title-head">
-                      <h6>
-                        <span>
-                          <Info className="feather-edit" />
-                        </span>
-                        Other Information
-                      </h6>
-                    </div>
-                    <div className="row">
-                      <div className="col-lg-4 col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">Emergency No 1</label>
-                          <input type="text" className="form-control" />
-                        </div>
-                      </div>
-                      <div className="col-lg-4 col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">Emergency No 2</label>
-                          <input type="text" className="form-control" />
-                        </div>
-                      </div>
-                      <div className="col-lg-4 col-md-6"></div>
-                      <div className="col-lg-4 col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">Address</label>
-                          <input type="text" className="form-control" />
-                        </div>
-                      </div>
-                      <div className="col-lg-4 col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">Country</label>
-
-                          <Select
-                            className="select"
-                            options={country}
-                            placeholder="Select"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-lg-4 col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">State</label>
-                          <input type="text" className="form-control" />
-                        </div>
-                      </div>
-                      <div className="col-lg-4 col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">City</label>
-                          <input type="text" className="form-control" />
-                        </div>
-                      </div>
-                      <div className="col-lg-4 col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">Zipcode</label>
-                          <input type="text" className="form-control" />
-                        </div>
                       </div>
                     </div>
                   </div>
                   <div className="pass-info">
-                    <div className="card-title-head">
-                      <h6>
-                        <span>
-                          <Info />
-                        </span>
-                        Password
-                      </h6>
-                    </div>
                     <div className="row">
                       <div className="col-lg-4 col-md-6">
                         <div className="input-blocks mb-md-0 mb-sm-3">
@@ -359,6 +231,10 @@ const AddEmployee = () => {
                               type={showPassword ? "text" : "password"}
                               className="pass-input"
                               placeholder="Enter your password"
+                              name="loginPassword"
+                              value={formData.loginPassword}
+                              onChange={handleInputChange}
+                              required
                             />
                             <span
                               className={`fas toggle-password ${
@@ -377,6 +253,10 @@ const AddEmployee = () => {
                               type={showConfirmPassword ? "text" : "password"}
                               className="pass-input"
                               placeholder="Enter your password"
+                              name="confirmPassword"
+                              value={formData.confirmPassword}
+                              onChange={handleInputChange}
+                              required
                             />
                             <span
                               className={`fas toggle-password ${
@@ -392,14 +272,13 @@ const AddEmployee = () => {
                 </div>
               </div>
             </div>
-            {/* /product list */}
             <div className="text-end mb-3">
-              <button type="button" className="btn btn-cancel me-2">
+              <button type="button" className="btn btn-cancel me-2" onClick={handleCancel}>
                 Cancel
               </button>
-              <Link to="#" className="btn btn-submit">
-                Save Product
-              </Link>
+              <button type="submit" className="btn btn-submit">
+                Save Employee
+              </button>
             </div>
           </form>
         </div>

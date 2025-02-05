@@ -1,380 +1,183 @@
-import React from "react";
-import { Eye, Star, Trash2 } from "react-feather/dist";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import PropTypes from 'prop-types';
 import Select from "react-select";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
-const TodoModal = () => {
-  const optionsChoose = [
-    { value: "Choose", label: "Choose" },
-    { value: "Recent1", label: "Recent1" },
-    { value: "Recent2", label: "Recent2" },
+const TodoModal = ({ onAddTodo, onUpdateTodo, onDeleteTodo, selectedTodo }) => {
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    status: 'pending',
+    priority: 'medium',
+    tag: 'pending',
+    dueDate: new Date()
+  });
+
+  useEffect(() => {
+    if (selectedTodo) {
+      setFormData({
+        ...selectedTodo,
+        dueDate: selectedTodo.dueDate ? new Date(selectedTodo.dueDate) : new Date()
+      });
+    }
+  }, [selectedTodo]);
+
+  const tagOptions = [
+    { value: "pending", label: "Pending" },
+    { value: "onhold", label: "Onhold" },
+    { value: "inprogress", label: "Inprogress" },
+    { value: "done", label: "Done" }
   ];
 
-  const optionsSelect = [
-    { value: "Select", label: "Select" },
-    { value: "Recent1", label: "Recent1" },
-    { value: "Recent2", label: "Recent2" },
+  const priorityOptions = [
+    { value: "high", label: "High" },
+    { value: "medium", label: "Medium" },
+    { value: "low", label: "Low" }
   ];
 
-  const optionsOnHold = [{ value: "Onhold", label: "Onhold" }];
-
-  const optionsPriority = [
-    { value: "High", label: "High" },
-    { value: "Medium", label: "Medium" },
-    { value: "Low", label: "Low" },
+  const statusOptions = [
+    { value: "pending", label: "Pending" },
+    { value: "completed", label: "Completed" },
+    { value: "deleted", label: "Deleted" }
   ];
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (selectedTodo) {
+      onUpdateTodo(selectedTodo.id, formData);
+    } else {
+      onAddTodo(formData);
+    }
+    setFormData({
+      title: '',
+      description: '',
+      status: 'pending',
+      priority: 'medium',
+      tag: 'pending',
+      dueDate: new Date()
+    });
+    document.getElementById('close-modal').click();
+  };
+
+  const handleDelete = () => {
+    if (selectedTodo) {
+      onDeleteTodo(selectedTodo.id);
+      document.getElementById('close-modal').click();
+    }
+  };
+
   return (
-    <div>
-      {/* Add Note */}
-      <div className="modal fade" id="note-units">
-        <div className="modal-dialog modal-dialog-centered custom-modal-two">
-          <div className="modal-content">
-            <div className="page-wrapper-new p-0">
-              <div className="content">
-                <div className="modal-header border-0 custom-modal-header">
-                  <div className="page-title">
-                    <h4>Add Todo</h4>
-                  </div>
-                  <button
-                    type="button"
-                    className="close"
-                    data-bs-dismiss="modal"
-                    aria-label="Close"
-                  >
-                    <span aria-hidden="true">×</span>
-                  </button>
-                </div>
-                <div className="modal-body custom-modal-body">
-                  <form action="todo">
-                    <div className="row">
-                      <div className="col-12">
-                        <div className="mb-3">
-                          <label className="form-label">Todo Title</label>
-                          <input type="text" className="form-control" />
-                        </div>
-                      </div>
-                      <div className="col-12">
-                        <div className="mb-3">
-                          <label className="form-label">Assignee</label>
-                          <Select
-                            className="select"
-                            options={optionsChoose}
-                            placeholder="Choose"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-6">
-                        <div className="mb-3">
-                          <label className="form-label">Tag</label>
-                          <Select
-                            className="select"
-                            options={optionsSelect}
-                            placeholder="Select"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-6">
-                        <div className="mb-3">
-                          <label className="form-label">Priority</label>
-                          <Select
-                            className="select"
-                            options={optionsSelect}
-                            placeholder="Select"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-6">
-                        <div className="input-blocks todo-calendar">
-                          <label className="form-label">Due Date</label>
-                          <div className="input-groupicon calender-input">
-                            <input
-                              type="text"
-                              className="form-control  date-range bookingrange"
-                              placeholder="Select"
-                              defaultValue="13 Aug 1992"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="col-6">
-                        <div className="mb-3">
-                          <label className="form-label">Status</label>
-                          <Select
-                            className="select"
-                            options={optionsSelect}
-                            placeholder="Select"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-lg-12">
-                        <div className="mb-3 summer-description-box notes-summernote">
-                          <label className="form-label">Descriptions</label>
-                          <div id="summernote" />
-                          <p>Maximum 60 Characters</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="modal-footer-btn">
-                      <button
-                        type="button"
-                        className="btn btn-cancel me-2"
-                        data-bs-dismiss="modal"
-                      >
-                        Cancel
-                      </button>
-                      <button type="submit" className="btn btn-submit">
-                        Submit
-                      </button>
-                    </div>
-                  </form>
-                </div>
+    <div className="modal fade" id="note-units">
+      <div className="modal-dialog modal-dialog-centered">
+        <div className="modal-content">
+          <div className="modal-header">
+            <h5 className="modal-title">
+              {selectedTodo ? 'Edit Todo' : 'Add Todo'}
+            </h5>
+            <button
+              id="close-modal"
+              type="button"
+              className="close"
+              data-bs-dismiss="modal"
+            >
+              <span>&times;</span>
+            </button>
+          </div>
+          <form onSubmit={handleSubmit}>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Title</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={formData.title}
+                  onChange={(e) => setFormData({...formData, title: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <textarea
+                  className="form-control"
+                  value={formData.description}
+                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                />
+              </div>
+              <div className="form-group">
+                <label>Tag</label>
+                <Select
+                  value={tagOptions.find(option => option.value === formData.tag)}
+                  onChange={(option) => setFormData({...formData, tag: option.value})}
+                  options={tagOptions}
+                />
+              </div>
+              <div className="form-group">
+                <label>Priority</label>
+                <Select
+                  value={priorityOptions.find(option => option.value === formData.priority)}
+                  onChange={(option) => setFormData({...formData, priority: option.value})}
+                  options={priorityOptions}
+                />
+              </div>
+              <div className="form-group">
+                <label>Due Date</label>
+                <DatePicker
+                  selected={formData.dueDate}
+                  onChange={(date) => setFormData({...formData, dueDate: date})}
+                  className="form-control"
+                />
+              </div>
+              <div className="form-group">
+                <label>Status</label>
+                <Select
+                  value={statusOptions.find(option => option.value === formData.status)}
+                  onChange={(option) => setFormData({...formData, status: option.value})}
+                  options={statusOptions}
+                />
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-      {/* /Add Note */}
-      {/* Edit Note */}
-      <div className="modal fade" id="edit-note-units">
-        <div className="modal-dialog modal-dialog-centered custom-modal-two">
-          <div className="modal-content">
-            <div className="page-wrapper-new p-0">
-              <div className="content">
-                <div className="modal-header border-0 custom-modal-header">
-                  <div className="page-title">
-                    <h4>Todo Title</h4>
-                  </div>
-                  <div className=" edit-note-head d-flex align-items-center">
-                    <Link to="#" className="me-2">
-                      <span>
-                        <Trash2 />
-                      </span>
-                    </Link>
-                    <Link to="#" className="me-2">
-                      <span>
-                        <Star />
-                      </span>
-                    </Link>
-                    <Link to="#" className="me-2">
-                      <span>
-                        <Eye />
-                      </span>
-                    </Link>
-                    <button
-                      type="button"
-                      className="close"
-                      data-bs-dismiss="modal"
-                      aria-label="Close"
-                    >
-                      <span aria-hidden="true">×</span>
-                    </button>
-                  </div>
-                </div>
-                <div className="modal-body custom-modal-body">
-                  <form action="todo">
-                    <div className="row">
-                      <div className="col-12">
-                        <div className="input-blocks">
-                          <label className="form-label">Note Title</label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            placeholder="Meet Lisa to discuss project details"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-12">
-                        <div className="input-blocks">
-                          <label className="form-label">Assignee</label>
-                          <Select
-                            className="select"
-                            options={optionsSelect}
-                            placeholder="Select"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-6">
-                        <div className="input-blocks">
-                          <label className="form-label">Tag</label>
-                          <Select
-                            className="select"
-                            options={optionsOnHold}
-                            placeholder="Onhold"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-6">
-                        <div className="input-blocks">
-                          <label className="form-label">Priority</label>
-
-                          <Select
-                            className="select"
-                            options={optionsPriority}
-                            placeholder="Priority"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-6">
-                        <div className="input-blocks todo-calendar">
-                          <label className="form-label">Due Date</label>
-                          <div className="input-groupicon calender-input">
-                            <input
-                              type="text"
-                              className="form-control date-range bookingrange"
-                              placeholder="Select"
-                              defaultValue="13 Aug 1992"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="col-6">
-                        <div className="input-blocks">
-                          <label className="form-label">Status</label>
-                          <Select
-                            className="select"
-                            options={optionsChoose}
-                            placeholder="Choose"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-lg-12">
-                        <div className="input-blocks summer-description-box notes-summernote">
-                          <label className="form-label">Descriptions</label>
-                          <div id="summernote2" />
-                          <p>Maximum 60 Characters</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="modal-footer-btn">
-                      <button
-                        type="button"
-                        className="btn btn-cancel me-2"
-                        data-bs-dismiss="modal"
-                      >
-                        Cancel
-                      </button>
-                      <button type="submit" className="btn btn-submit">
-                        Save Changes
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
+            <div className="modal-footer">
+              {selectedTodo && (
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={handleDelete}
+                >
+                  Delete
+                </button>
+              )}
+              <button type="submit" className="btn btn-primary">
+                {selectedTodo ? 'Update' : 'Add'} Todo
+              </button>
             </div>
-          </div>
+          </form>
         </div>
       </div>
-      {/* /Edit Note */}
-      {/* Delete Note */}
-      <div className="modal fade" id="delete-note-units">
-        <div className="modal-dialog modal-dialog-centered">
-          <div className="modal-content">
-            <div className="page-wrapper-new p-0">
-              <div className="content">
-                <div className="delete-popup">
-                  <div className="delete-image text-center mx-auto">
-                    <img
-                      src="./assets/img/icons/close-circle.png"
-                      alt="Img"
-                      className="img-fluid"
-                    />
-                  </div>
-                  <div className="delete-heads">
-                    <h4>Are You Sure?</h4>
-                    <p>
-                      Do you really want to delete this item, This process
-                      cannot be undone.
-                    </p>
-                  </div>
-                  <div className="modal-footer-btn delete-footer">
-                    <Link
-                      to="#"
-                      className="btn btn-cancel me-2"
-                      data-bs-dismiss="modal"
-                    >
-                      Cancel
-                    </Link>
-                    <Link to="#" className="btn btn-submit">
-                      Delete
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      {/* /Delete Note */}
-      {/* View Note */}
-      <div className="modal fade" id="view-note-units">
-        <div className="modal-dialog modal-dialog-centered">
-          <div className="modal-content">
-            <div className="page-wrapper-new p-0">
-              <div className="content">
-                <div className="modal-header border-0 custom-modal-header">
-                  <div className="page-title edit-page-title">
-                    <h4>Todo</h4>
-                    <p>Personal</p>
-                  </div>
-                  <div className=" edit-noted-head d-flex align-items-center">
-                    <Link to="#">
-                      <span>
-                        <i data-feather="trash-2" />
-                      </span>
-                    </Link>
-                    <Link to="#" className="me-2">
-                      <span>
-                        <i data-feather="star" />
-                      </span>
-                    </Link>
-                    <button
-                      type="button"
-                      className="close"
-                      data-bs-dismiss="modal"
-                      aria-label="Close"
-                    >
-                      <span aria-hidden="true">×</span>
-                    </button>
-                  </div>
-                </div>
-                <div className="modal-body custom-modal-body">
-                  <div className="row">
-                    <div className="col-12">
-                      <div className="edit-head-view">
-                        <h6>Meet Lisa to discuss project details</h6>
-                        <p>
-                          Hiking is a long, vigorous walk, usually on trails or
-                          footpaths in the countryside. Walking for pleasure
-                          developed in Europe during the eighteenth century.
-                          Religious pilgrimages have existed much longer but
-                          they involve walking long distances for a spiritual
-                          purpose associated with specific religions and also we
-                          achieve inner peace while we hike at a local park.
-                        </p>
-                        <p className="badged high">
-                          <i className="fas fa-circle" /> High
-                        </p>
-                      </div>
-                      <div className="modal-footer-btn edit-footer-menu">
-                        <Link
-                          to
-                          className="btn btn-cancel me-2"
-                          data-bs-dismiss="modal"
-                        >
-                          Close
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      {/* /View Note */}
     </div>
   );
+};
+
+TodoModal.propTypes = {
+  onAddTodo: PropTypes.func.isRequired,
+  onUpdateTodo: PropTypes.func.isRequired,
+  onDeleteTodo: PropTypes.func.isRequired,
+  selectedTodo: PropTypes.shape({
+    id: PropTypes.number.isRequired,
+    title: PropTypes.string.isRequired,
+    description: PropTypes.string,
+    status: PropTypes.oneOf(['pending', 'completed', 'deleted']),
+    priority: PropTypes.oneOf(['high', 'medium', 'low']),
+    tag: PropTypes.oneOf(['pending', 'onhold', 'inprogress', 'done']),
+    dueDate: PropTypes.oneOfType([
+      PropTypes.string,
+      PropTypes.instanceOf(Date)
+    ])
+  })
+};
+
+TodoModal.defaultProps = {
+  selectedTodo: null
 };
 
 export default TodoModal;

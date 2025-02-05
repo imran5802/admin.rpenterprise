@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import FeatherIcon from "feather-icons-react";
 import ImageWithBasePath from "../../core/img/imagewithbasebath";
-import { Search, XCircle } from "react-feather";
+// import { Search, XCircle } from "react-feather";
 import { all_routes } from "../../Router/all_routes";
 
 const Header = () => {
@@ -205,7 +205,7 @@ const Header = () => {
         {/* Header Menu */}
         <ul className="nav user-menu">
           {/* Search */}
-          <li className="nav-item nav-searchinputs">
+          {/* <li className="nav-item nav-searchinputs">
             <div className="top-nav-search">
               <Link to="#" className="responsive-search">
                 <Search />
@@ -303,11 +303,11 @@ const Header = () => {
                 </div>
               </form>
             </div>
-          </li>
+          </li> */}
           {/* /Search */}
 
           {/* Select Store */}
-          <li className="nav-item dropdown has-arrow main-drop select-store-dropdown">
+          {/* <li className="nav-item dropdown has-arrow main-drop select-store-dropdown">
             <Link
               to="#"
               className="dropdown-toggle nav-link select-store"
@@ -360,19 +360,17 @@ const Header = () => {
                 Grocery Eden
               </Link>
             </div>
-          </li>
+          </li> */}
           {/* /Select Store */}
 
           {/* Flag */}
-          <li className="nav-item dropdown has-arrow flag-nav nav-item-box">
+          {/* <li className="nav-item dropdown has-arrow flag-nav nav-item-box">
             <Link
               className="nav-link dropdown-toggle"
               data-bs-toggle="dropdown"
               to="#"
               role="button"
             >
-              {/* <i data-feather="globe" /> */}
-              {/* <FeatherIcon icon="globe" /> */}
               <ImageWithBasePath
                 src="assets/img/flags/us.png"
                 alt="img"
@@ -413,7 +411,7 @@ const Header = () => {
                 German
               </Link>
             </div>
-          </li>
+          </li> */}
           {/* /Flag */}
           <li className="nav-item nav-item-box">
             <Link

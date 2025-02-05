@@ -33,7 +33,7 @@ const Loader = () => {
       </div>
     )}
       <Routes>
-        <Route path="/"/>
+        <Route path="*"/>
       </Routes>
   </div>
   );

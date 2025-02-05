@@ -1,7 +1,7 @@
+import React, { useState } from 'react';
 import { DatePicker } from 'antd';
-import React, { useState } from 'react'
 import { Link } from 'react-router-dom';
-import Select from 'react-select'
+import Select from 'react-select';
 
 const AddCoupons = () => {
     const price = [

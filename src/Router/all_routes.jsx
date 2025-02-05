@@ -190,4 +190,6 @@ export const all_routes = {
   leavestype: "/leave-types",
   warehouses: "/warehouse",
   coupons:"/coupons",
+
+  paymenthistory: "/payment-history",
 };

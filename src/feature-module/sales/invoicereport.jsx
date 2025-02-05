@@ -1,324 +1,317 @@
-import React, { useState } from 'react'
-import { OverlayTrigger, Tooltip } from 'react-bootstrap';
-import { Link } from 'react-router-dom';
-import ImageWithBasePath from '../../core/img/imagewithbasebath';
-import { ChevronUp, RotateCcw, Sliders, StopCircle, User } from 'feather-icons-react/build/IconComponents';
-import { setToogleHeader } from '../../core/redux/action';
-import { useDispatch, useSelector } from 'react-redux';
-import { Filter } from 'react-feather';
-import Select from 'react-select';
-import Table from '../../core/pagination/datatable'
-import DateRangePicker from 'react-bootstrap-daterangepicker';
-import Calendar from 'feather-icons-react/build/IconComponents/Calendar';
-
+import React, { useEffect, useState } from "react";
+import { OverlayTrigger, Tooltip } from "react-bootstrap";
+import { Link } from "react-router-dom";
+import ImageWithBasePath from "../../core/img/imagewithbasebath";
+import {
+  ChevronUp,
+  RotateCcw,
+  StopCircle,
+} from "feather-icons-react/build/IconComponents";
+import { setToogleHeader } from "../../core/redux/action";
+import { useDispatch, useSelector } from "react-redux";
+import Select from "react-select";
+import Table from "../../core/pagination/datatable";
 
 const InvoiceReport = () => {
-    const dataSource = useSelector((state) => state.invoicereport_data);
+  // 1. State declarations
+  const [sales, setSales] = useState([]);
+  const [filteredSales, setFilteredSales] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedPaymentStatus, setSelectedPaymentStatus] = useState(null);
 
-    const dispatch = useDispatch();
-    const data = useSelector((state) => state.toggle_header);
+  const dispatch = useDispatch();
+  const data = useSelector((state) => state.toggle_header);
 
+  // 2. Options and constants
+  const paymentStatusOptions = [
+    { value: "all", label: "All Payments" },
+    { value: "Paid", label: "Paid" },
+    { value: "Unpaid", label: "Unpaid" },
+    { value: "Canceled", label: "Canceled" },
+  ];
 
-    const [isFilterVisible, setIsFilterVisible] = useState(false);
+  // 3. Tooltip functions
+  const renderTooltip = (props) => (
+    <Tooltip id="pdf-tooltip" {...props}>
+      Pdf
+    </Tooltip>
+  );
 
-    const toggleFilterVisibility = () => {
-        setIsFilterVisible((prevVisibility) => !prevVisibility);
-    };
-    const renderTooltip = (props) => (
-        <Tooltip id="pdf-tooltip" {...props}>
-            Pdf
-        </Tooltip>
-    );
-    const renderExcelTooltip = (props) => (
-        <Tooltip id="excel-tooltip" {...props}>
-            Excel
-        </Tooltip>
-    );
-    const renderPrinterTooltip = (props) => (
-        <Tooltip id="printer-tooltip" {...props}>
-            Printer
-        </Tooltip>
-    );
-    const renderRefreshTooltip = (props) => (
-        <Tooltip id="refresh-tooltip" {...props}>
-            Refresh
-        </Tooltip>
-    );
-    const renderCollapseTooltip = (props) => (
-        <Tooltip id="refresh-tooltip" {...props}>
-            Collapse
-        </Tooltip>
-    )
-    const status = [
-        { value: 'Choose Name', label: 'Choose Name' },
-        { value: 'Rose', label: 'Rose' },
-        { value: 'Kaitlin', label: 'Kaitlin' },
-    ];
-    const statusupdate = [
-        { value: 'Choose Status', label: 'Choose Status' },
-        { value: 'Paid', label: 'Paid' },
-        { value: 'Unpaid', label: 'Unpaid' },
-        { value: 'Overdue', label: 'Overdue' },
-    ];
-    const oldandlatestvalue = [
-        { value: 'Sort by Date', label: 'Sort by Date' },
-        { value: '07 09 23', label: '07 09 23' },
-        { value: '21 09 23', label: '21 09 23' },
-    ];
+  const renderExcelTooltip = (props) => (
+    <Tooltip id="excel-tooltip" {...props}>
+      Excel
+    </Tooltip>
+  );
 
-    const columns = [
+  const renderPrinterTooltip = (props) => (
+    <Tooltip id="printer-tooltip" {...props}>
+      Printer
+    </Tooltip>
+  );
 
-        {
-            title: "invoiceno",
-            dataIndex: "invoiceno",
-            sorter: (a, b) => a.invoiceno.length - b.invoiceno.length,
-        },
+  const renderRefreshTooltip = (props) => (
+    <Tooltip id="refresh-tooltip" {...props}>
+      Refresh
+    </Tooltip>
+  );
 
-        {
-            title: "customer",
-            dataIndex: "customer",
-            sorter: (a, b) => a.customer.length - b.customer.length,
-        },
-        {
-            title: "duedate",
-            dataIndex: "duedate",
-            sorter: (a, b) => a.duedate.length - b.duedate.length,
-        },
-        {
-            title: "amount",
-            dataIndex: "amount",
-            sorter: (a, b) => a.amount.length - b.amount.length,
-        },
-        {
-            title: "paid",
-            dataIndex: "paid",
-            sorter: (a, b) => a.paid.length - b.paid.length,
-        },
-        {
-            title: "amountdue",
-            dataIndex: "amountdue",
-            sorter: (a, b) => a.amountdue.length - b.amountdue.length,
-        },
+  const renderCollapseTooltip = (props) => (
+    <Tooltip id="collapse-tooltip" {...props}>
+      Collapse
+    </Tooltip>
+  );
 
-        {
-            title: "Status",
-            dataIndex: "status",
-            render: (text) => (
-                <div>
-                    {text === "Paid" && (
-                        <span className="badge badge-linesuccess">{text}</span>
-                    )}
-                    {text === "Unpaid" && (
-                        <span className="badge badge-linedanger">{text}</span>
-                    )}
-                    {text === "Overdue" && (
-                        <span className="badge badges-warning">{text}</span>
-                    )}
-                </div>
-            ),
-            sorter: (a, b) => a.status.length - b.status.length,
-        },
+  // 4. Handler functions
+  const handleSearchChange = (event) => {
+    setSearchTerm(event.target.value);
+  };
 
-    ]
-    const initialSettings = {
-        endDate: new Date("2020-08-11T12:30:00.000Z"),
-        ranges: {
-            "Last 30 Days": [
-                new Date("2020-07-12T04:57:17.076Z"),
-                new Date("2020-08-10T04:57:17.076Z"),
-            ],
-            "Last 7 Days": [
-                new Date("2020-08-04T04:57:17.076Z"),
-                new Date("2020-08-10T04:57:17.076Z"),
-            ],
-            "Last Month": [
-                new Date("2020-06-30T18:30:00.000Z"),
-                new Date("2020-07-31T18:29:59.999Z"),
-            ],
-            "This Month": [
-                new Date("2020-07-31T18:30:00.000Z"),
-                new Date("2020-08-31T18:29:59.999Z"),
-            ],
-            Today: [
-                new Date("2020-08-10T04:57:17.076Z"),
-                new Date("2020-08-10T04:57:17.076Z"),
-            ],
-            Yesterday: [
-                new Date("2020-08-09T04:57:17.076Z"),
-                new Date("2020-08-09T04:57:17.076Z"),
-            ],
-        },
-        startDate: new Date("2020-08-04T04:57:17.076Z"), // Set "Last 7 Days" as default
-        timePicker: false,
-    };
-    return (
+  const handlePaymentStatusChange = (selected) => {
+    setSelectedPaymentStatus(selected);
+  };
+
+  // 5. Data fetching and filtering
+  const fetchSales = async () => {
+    try {
+      const response = await fetch("http://localhost:3006/api/sales");
+      const data = await response.json();
+      if (data.success) {
+        setSales(data.sales);
+        setFilteredSales(data.sales);
+      } else {
+        setError("Failed to fetch sales data");
+      }
+    } catch (err) {
+      setError("Error connecting to server");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filterSales = () => {
+    let filtered = [...sales];
+
+    if (selectedPaymentStatus?.value && selectedPaymentStatus.value !== "all") {
+      filtered = filtered.filter(
+        (sale) => sale.paymentStatus === selectedPaymentStatus.value
+      );
+    }
+
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase().trim();
+      filtered = filtered.filter((sale) => {
+        const searchableFields = [
+          sale.customerName,
+          sale.customerPhone,
+          sale.customerEmail,
+          sale.orderNumber,
+          sale.shippingAddress,
+        ];
+        return searchableFields.some((field) =>
+          field?.toLowerCase().includes(searchLower)
+        );
+      });
+    }
+
+    setFilteredSales(filtered);
+  };
+
+  // 6. Effects
+  useEffect(() => {
+    fetchSales();
+  }, []);
+
+  useEffect(() => {
+    filterSales();
+  }, [searchTerm, selectedPaymentStatus, sales]);
+
+  // 7. Table columns configuration
+  const columns = [
+    {
+      title: "orderNumber",
+      dataIndex: "orderNumber",
+      sorter: (a, b) => a.orderNumber.length - b.orderNumber.length,
+    },
+
+    {
+      title: "customerName",
+      dataIndex: "customerName",
+      sorter: (a, b) => a.customerName.length - b.customerName.length,
+    },
+    {
+      title: "orderDate",
+      dataIndex: "orderDate",
+      sorter: (a, b) => new Date(a.orderDate) - new Date(b.orderDate),
+      render: (text) => {
+        const date = new Date(text);
+        return date.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: true,
+        });
+      },
+    },
+    {
+      title: "totalAmount",
+      dataIndex: "totalAmount",
+      sorter: (a, b) => a.totalAmount.length - b.totalAmount.length,
+    },
+    {
+      title: "paidAmount",
+      dataIndex: "paidAmount",
+      sorter: (a, b) => a.paidAmount.length - b.paidAmount.length,
+    },
+    {
+      title: "dueAmount",
+      dataIndex: "dueAmount",
+      sorter: (a, b) => a.dueAmount.length - b.dueAmount.length,
+    },
+
+    {
+      title: "Status",
+      dataIndex: "paymentStatus",
+      render: (text) => (
         <div>
-            <div className="page-wrapper">
-                <div className="content">
-                    <div className="page-header">
-                        <div className="add-item d-flex">
-                            <div className="page-title">
-                                <h4>Invoice Report </h4>
-                                <h6>Manage Your Invoice Report</h6>
-                            </div>
-                        </div>
-                        <ul className="table-top-head">
-                            <li>
-                                <OverlayTrigger placement="top" overlay={renderTooltip}>
-                                    <Link>
-                                        <ImageWithBasePath src="assets/img/icons/pdf.svg" alt="img" />
-                                    </Link>
-                                </OverlayTrigger>
-                            </li>
-                            <li>
-                                <OverlayTrigger placement="top" overlay={renderExcelTooltip}>
-                                    <Link data-bs-toggle="tooltip" data-bs-placement="top">
-                                        <ImageWithBasePath src="assets/img/icons/excel.svg" alt="img" />
-                                    </Link>
-                                </OverlayTrigger>
-                            </li>
-                            <li>
-                                <OverlayTrigger placement="top" overlay={renderPrinterTooltip}>
-
-                                    <Link data-bs-toggle="tooltip" data-bs-placement="top">
-                                        <i data-feather="printer" className="feather-printer" />
-                                    </Link>
-                                </OverlayTrigger>
-                            </li>
-                            <li>
-                                <OverlayTrigger placement="top" overlay={renderRefreshTooltip}>
-
-                                    <Link data-bs-toggle="tooltip" data-bs-placement="top">
-                                        <RotateCcw />
-                                    </Link>
-                                </OverlayTrigger>
-                            </li>
-                            <li>
-                                <OverlayTrigger placement="top" overlay={renderCollapseTooltip}>
-
-                                    <Link
-                                        data-bs-toggle="tooltip"
-                                        data-bs-placement="top"
-                                        id="collapse-header"
-                                        className={data ? "active" : ""}
-                                        onClick={() => { dispatch(setToogleHeader(!data)) }}
-                                    >
-                                        <ChevronUp />
-                                    </Link>
-                                </OverlayTrigger>
-                            </li>
-                        </ul>
-                    </div>
-                    {/* /product list */}
-                    <div className="card table-list-card">
-                        <div className="card-body">
-                            <div className="table-top">
-                                <div className="search-set">
-                                    <div className="search-set">
-                                        <div className="search-input">
-                                            <input
-                                                type="text"
-                                                placeholder="Search"
-                                                className="form-control form-control-sm formsearch"
-                                            />
-                                            <Link to className="btn btn-searchset">
-                                                <i data-feather="search" className="feather-search" />
-                                            </Link>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="search-path">
-                                    <div className="d-flex align-items-center">
-                                        <Link className={`btn btn-filter ${isFilterVisible ? "setclose" : ""}`} id="filter_search">
-                                            <Filter
-                                                className="filter-icon"
-                                                onClick={toggleFilterVisibility}
-                                            />
-                                            <span onClick={toggleFilterVisibility}>
-                                                <ImageWithBasePath src="assets/img/icons/closes.svg" alt="img" />
-                                            </span>
-                                        </Link>
-                                    </div>
-                                </div>
-                                <div className="form-sort">
-                                    <Sliders className="info-img" />
-                                    <Select
-                                        className="select"
-                                        options={oldandlatestvalue}
-                                        placeholder="Newest"
-                                    />
-                                </div>
-                            </div>
-                            {/* /Filter */}
-                            <div
-                                className={`card${isFilterVisible ? ' visible' : ''}`}
-                                id="filter_inputs"
-                                style={{ display: isFilterVisible ? 'block' : 'none' }}
-                            >
-                                <div className="card-body pb-0">
-                                    <div className="row">
-                                        <div className="col-lg-3 col-sm-6 col-12">
-                                            <div className="input-blocks">
-                                                <User className="info-img" />
-
-                                                <Select
-                                                    className="select"
-                                                    options={status}
-                                                    placeholder="Choose Brand"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="col-lg-3 col-sm-6 col-12">
-                                            <div className="input-blocks">
-
-                                                <StopCircle className="info-img" />
-
-                                                <Select
-                                                    className="select"
-                                                    options={statusupdate}
-                                                    placeholder="Choose Brand"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="col-lg-3 col-sm-6 col-12">
-                                            <div className="input-blocks">
-                                                <div className="position-relative daterange-wraper">
-                                                    <Calendar />
-                                                    <DateRangePicker
-                                                        initialSettings={initialSettings}
-                                                    >
-                                                        <input
-                                                            className="form-control"
-                                                            type="text"
-                                                        //style={{ border: "none" }}
-                                                        />
-                                                    </DateRangePicker>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="col-lg-3 col-sm-6 col-12">
-                                            <div className="input-blocks">
-                                                <a className="btn btn-filters ms-auto">
-                                                    {" "}
-                                                    <i data-feather="search" className="feather-search" />{" "}
-                                                    Search{" "}
-                                                </a>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            {/* /Filter */}
-                            <div className="table-responsive">
-                                <Table columns={columns} dataSource={dataSource} />
-                            </div>
-                        </div>
-                    </div>
-                    {/* /product list */}
-                </div>
-            </div>
+          {text === "Paid" && (
+            <span className="badge badge-linesuccess">{text}</span>
+          )}
+          {text === "Unpaid" && (
+            <span className="badge badge-linedanger">{text}</span>
+          )}
+          {text === "Partial" && (
+            <span className="badge badge-linedanger">{text}</span>
+          )}
+          {text === "Canceled" && (
+            <span className="badge badges-warning">{text}</span>
+          )}
         </div>
-    )
-}
+      ),
+      sorter: (a, b) => a.paymentStatus.length - b.paymentStatus.length,
+    },
+  ];
 
-export default InvoiceReport
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error}</div>;
+
+  return (
+    <div>
+      <div className="page-wrapper">
+        <div className="content">
+          <div className="page-header">
+            <div className="add-item d-flex">
+              <div className="page-title">
+                <h4>Invoice Report </h4>
+                <h6>Manage Your Invoice Report</h6>
+              </div>
+            </div>
+            <ul className="table-top-head">
+              <li>
+                <OverlayTrigger placement="top" overlay={renderTooltip}>
+                  <Link>
+                    <ImageWithBasePath
+                      src="assets/img/icons/pdf.svg"
+                      alt="img"
+                    />
+                  </Link>
+                </OverlayTrigger>
+              </li>
+              <li>
+                <OverlayTrigger placement="top" overlay={renderExcelTooltip}>
+                  <Link data-bs-toggle="tooltip" data-bs-placement="top">
+                    <ImageWithBasePath
+                      src="assets/img/icons/excel.svg"
+                      alt="img"
+                    />
+                  </Link>
+                </OverlayTrigger>
+              </li>
+              <li>
+                <OverlayTrigger placement="top" overlay={renderPrinterTooltip}>
+                  <Link data-bs-toggle="tooltip" data-bs-placement="top">
+                    <i data-feather="printer" className="feather-printer" />
+                  </Link>
+                </OverlayTrigger>
+              </li>
+              <li>
+                <OverlayTrigger placement="top" overlay={renderRefreshTooltip}>
+                  <Link data-bs-toggle="tooltip" data-bs-placement="top">
+                    <RotateCcw />
+                  </Link>
+                </OverlayTrigger>
+              </li>
+              <li>
+                <OverlayTrigger placement="top" overlay={renderCollapseTooltip}>
+                  <Link
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="top"
+                    id="collapse-header"
+                    className={data ? "active" : ""}
+                    onClick={() => {
+                      dispatch(setToogleHeader(!data));
+                    }}
+                  >
+                    <ChevronUp />
+                  </Link>
+                </OverlayTrigger>
+              </li>
+            </ul>
+          </div>
+          {/* /product list */}
+          <div className="card table-list-card">
+            <div className="card-body">
+              <div className="table-top">
+                <div className="search-set">
+                  <div className="search-input">
+                    <input
+                      type="text"
+                      placeholder="Search"
+                      className="form-control form-control-sm formsearch"
+                      value={searchTerm}
+                      onChange={handleSearchChange}
+                    />
+                    <Link to className="btn btn-searchset">
+                      <i data-feather="search" className="feather-search" />
+                    </Link>
+                  </div>
+                </div>
+                <div
+                  className="d-flex align-items-center"
+                  style={{ gap: "15px" }}
+                >
+                  <div
+                    className="d-flex align-items-center"
+                    style={{ width: "280px" }}
+                  >
+                    <label className="me-2 mb-0">Payment:</label>
+                    <div className="form-sort flex-grow-1">
+                      <StopCircle className="info-img" />
+                      <Select
+                        className="select"
+                        options={paymentStatusOptions}
+                        placeholder="Payment Status"
+                        onChange={handlePaymentStatusChange}
+                        value={selectedPaymentStatus}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="table-responsive">
+                <Table columns={columns} dataSource={filteredSales} fixedHeader={true} />
+              </div>
+            </div>
+          </div>
+          {/* /product list */}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default InvoiceReport;
