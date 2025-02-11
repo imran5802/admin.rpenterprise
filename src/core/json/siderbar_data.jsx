@@ -86,16 +86,10 @@ const getAllMenus = () => [
         submenu: false,
         showSubRoute: false,
         icon: <Icon.FileText />,
-      },
-      {
-        label: "Income",
-        link: "/income-report",
-        icon: <Icon.BarChart />,
-        showSubRoute: false,
-      },      
+      },    
       {
         label: "Income-Expense Ledger",
-        link: "/profit-loss-report",
+        link: "/accounts-ledger",
         icon: <Icon.TrendingDown />,
         showSubRoute: false,
       },

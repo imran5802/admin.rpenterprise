@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   ChevronUp,
   Edit,
-  Eye,
   PlusCircle,
   RotateCcw,
   StopCircle
@@ -251,9 +250,9 @@ const ProductList = () => {
       dataIndex: "action",
       render: (_, record) => (
         <div className="edit-delete-action">
-          <Link className="me-2 p-2" to={`${route.productdetails}/${record.productID}`}>
+          {/* <Link className="me-2 p-2" to={`${route.productdetails}/${record.productID}`}>
             <Eye className="feather-view" />
-          </Link>
+          </Link> */}
           <Link className="me-2 p-2" to={`${route.editproduct}/${record.productID}`}>
             <Edit className="feather-edit" />
           </Link>

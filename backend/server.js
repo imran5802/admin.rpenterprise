@@ -1480,6 +1480,20 @@ app.post('/api/sales', async (req, res) => {
   }
 });
 
+// Add new endpoint to get accounts ledger
+app.get('/api/accounts', async (req, res) => {
+  const query = `
+    SELECT * FROM accounts ORDER BY created_at ASC
+  `;
+
+  try {
+    const [results] = await promisePool.query(query);
+    res.json({ success: true, accounts: results });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Replace app.listen with server.listen
 server.listen(port, () => {
   console.log(`Server running on port ${port}`);
