@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   ChevronUp,
   Edit,
@@ -40,9 +40,30 @@ const ProductList = () => {
     fetchProducts();
   }, []);
 
+  const filterProducts = useCallback(() => {
+    let filtered = products;
+
+    if (selectedCategory && selectedCategory.value !== 'all') {
+      filtered = filtered.filter(product => product.productCategory === selectedCategory.value);
+    }
+
+    if (selectedStatus && selectedStatus.value !== 'all') {
+      filtered = filtered.filter(product => product.productStatus === selectedStatus.value);
+    }
+
+    if (searchTerm) {
+      filtered = filtered.filter(product => 
+        product.productEnName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.productBnName.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    setFilteredProducts(filtered);
+  }, [products, searchTerm, selectedCategory, selectedStatus]);
+
   useEffect(() => {
     filterProducts();
-  }, [searchTerm, selectedCategory, selectedStatus]);
+  }, [filterProducts]);
 
   const fetchProducts = async () => {
     try {
@@ -82,27 +103,6 @@ const ProductList = () => {
       setLoading(false);
     }
   };  
-
-  const filterProducts = () => {
-    let filtered = products;
-
-    if (selectedCategory && selectedCategory.value !== 'all') {
-      filtered = filtered.filter(product => product.productCategory === selectedCategory.value);
-    }
-
-    if (selectedStatus && selectedStatus.value !== 'all') {
-      filtered = filtered.filter(product => product.productStatus === selectedStatus.value);
-    }
-
-    if (searchTerm) {
-      filtered = filtered.filter(product => 
-        product.productEnName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.productBnName.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    setFilteredProducts(filtered);
-  };
 
   const handleCategoryChange = (selectedOption) => {
     setSelectedCategory(selectedOption);

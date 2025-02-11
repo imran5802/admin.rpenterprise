@@ -5,23 +5,88 @@ const port = 3006;
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
+const http = require('http');
+const server = http.createServer(app);
+const WebSocket = require('ws');
+const wss = new WebSocket.Server({ server });
 
 app.use(cors());
-// Create a MySQL connection
-const db = mysql.createConnection({
+// Replace the single connection with a connection pool
+const pool = mysql.createPool({
   host: 'localhost',
   user: 'root',
   password: '',
-  database: 'rpbazaar_main'
+  database: 'rpbazaar_main',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
+  connectTimeout: 10000, // 10 seconds
+  acquireTimeout: 10000, // 10 seconds
+  timeout: 10000, // 10 seconds
 });
 
-db.connect(err => {
-  if (err) {
-    console.error('Error connecting to MySQL:', err);
-    return;
-  }
-  console.log('Connected to MySQL');
+// Add connection monitoring
+let isConnected = true;
+const maxRetries = 3;
+const retryInterval = 2000; // 2 seconds
+
+pool.on('connection', (connection) => {
+  isConnected = true;
+  console.log('Database connection established');
 });
+
+pool.on('error', (err) => {
+  isConnected = false;
+  console.error('Database pool error:', err);
+});
+
+// Wrapper function for database queries with retry logic
+const executeQuery = async (query, params = [], retries = maxRetries) => {
+  try {
+    const connection = await pool.promise().getConnection();
+    try {
+      const [results] = await connection.query(query, params);
+      connection.release();
+      isConnected = true;
+      return results;
+    } catch (error) {
+      connection.release();
+      throw error;
+    }
+  } catch (error) {
+    if (error.message?.includes('closed state') && retries > 0) {
+      console.log(`Retrying query, ${retries} attempts remaining...`);
+      await new Promise(resolve => setTimeout(resolve, retryInterval));
+      return executeQuery(query, params, retries - 1);
+    }
+    throw error;
+  }
+};
+
+// Middleware to check database connection
+app.use(async (req, res, next) => {
+  if (!isConnected) {
+    try {
+      // Test the connection
+      await pool.promise().query('SELECT 1');
+      isConnected = true;
+      next();
+    } catch (error) {
+      return res.status(503).json({
+        success: false,
+        error: 'Database connection lost. Please try again in a moment.',
+        retryAfter: retryInterval / 1000
+      });
+    }
+  } else {
+    next();
+  }
+});
+
+// Convert pool to use promises
+const promisePool = pool.promise();
 
 app.use(express.json());
 
@@ -53,28 +118,33 @@ const upload = multer({ storage: storage });
 app.use('/assets', express.static(path.join(__dirname, '../public/assets')));
 
 // Restore original products endpoint
-app.get('/api/products', (req, res) => {
-  db.query('SELECT * FROM product_list', (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+app.get('/api/products', async (req, res) => {
+  try {
+    const results = await executeQuery('SELECT * FROM product_list');
     res.json({ success: true, products: results });
-  });
+  } catch (err) {
+    console.error('Database error:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: err.message,
+      retryable: err.message?.includes('closed state')
+    });
+  }
 });
 
 // Individual Product
-app.get('/api/product_details/:id', (req, res) => {
+app.get('/api/product_details/:id', async (req, res) => {
   const productId = req.params.id;
-  db.query('SELECT * FROM product_list WHERE productID = ?', [productId], (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    const [results] = await promisePool.query('SELECT * FROM product_list WHERE productID = ?', [productId]);
     res.json({ success: true, product: results[0] });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Update Product with Image
-app.put('/api/update_product/:id', upload.single('file'), (req, res) => {
+app.put('/api/update_product/:id', upload.single('file'), async (req, res) => {
   const productId = req.params.id;
   const productData = req.body;
 
@@ -95,24 +165,24 @@ app.put('/api/update_product/:id', upload.single('file'), (req, res) => {
     }
   });
 
-  db.query('UPDATE product_list SET ? WHERE productID = ?', [productData, productId], (err, results) => {
-    if (err) {
-      return res.status(500).json({ 
-        success: false, 
-        error: 'Internal server error' 
-      });
-    } 
+  try {
+    await promisePool.query('UPDATE product_list SET ? WHERE productID = ?', [productData, productId]);
     res.json({ 
       success: true, 
       message: 'Product updated successfully',
       imageUrl: productData.imageUrl,
       updatedData: productData
     });
-  });
+  } catch (err) {
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error' 
+    });
+  }
 });
 
 // Create new product endpoint
-app.post('/api/products', upload.single('file'), (req, res) => {
+app.post('/api/products', upload.single('file'), async (req, res) => {
   const productData = req.body;
   let imageUrl = null;
 
@@ -141,15 +211,8 @@ app.post('/api/products', upload.single('file'), (req, res) => {
     }
   });
 
-  db.query('INSERT INTO product_list SET ?', dataToInsert, (err, results) => {
-    if (err) {
-      console.error('Database error:', err);
-      return res.status(500).json({ 
-        success: false, 
-        error: err.message 
-      });
-    }
-
+  try {
+    const [results] = await promisePool.query('INSERT INTO product_list SET ?', dataToInsert);
     res.json({ 
       success: true, 
       message: 'Product created successfully',
@@ -159,11 +222,17 @@ app.post('/api/products', upload.single('file'), (req, res) => {
         productID: results.insertId
       }
     });
-  });
+  } catch (err) {
+    console.error('Database error:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: err.message 
+    });
+  }
 });
 
 // Update Product Status endpoint
-app.patch('/api/products/:id/status', (req, res) => {
+app.patch('/api/products/:id/status', async (req, res) => {
   const productId = req.params.id;
   const { status } = req.body;
 
@@ -174,102 +243,99 @@ app.patch('/api/products/:id/status', (req, res) => {
     });
   }
 
-  db.query(
-    'UPDATE product_list SET productStatus = ? WHERE productID = ?',
-    [status, productId],
-    (err, results) => {
-      if (err) {
-        console.error('Database error:', err);
-        return res.status(500).json({ 
-          success: false, 
-          error: err.message 
-        });
-      }
+  try {
+    const [results] = await promisePool.query(
+      'UPDATE product_list SET productStatus = ? WHERE productID = ?',
+      [status, productId]
+    );
 
-      if (results.affectedRows === 0) {
-        return res.status(404).json({ 
-          success: false, 
-          error: 'Product not found' 
-        });
-      }
-
-      res.json({ 
-        success: true, 
-        message: 'Product status updated successfully',
-        status: status
+    if (results.affectedRows === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Product not found' 
       });
     }
-  );
+
+    res.json({ 
+      success: true, 
+      message: 'Product status updated successfully',
+      status: status
+    });
+  } catch (err) {
+    console.error('Database error:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: err.message 
+    });
+  }
 });
 
 // Categories API endpoints
-app.get('/api/categories', (req, res) => {
-  db.query('SELECT * FROM categories WHERE catStatus = "Active"', (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+app.get('/api/categories', async (req, res) => {
+  try {
+    const [results] = await promisePool.query('SELECT * FROM categories WHERE catStatus = "Active"');
     res.json({ success: true, categories: results });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.post('/api/categories', (req, res) => {
+app.post('/api/categories', async (req, res) => {
   const { catName, catStatus = 'Active' } = req.body;
   
   if (!catName) {
     return res.status(400).json({ success: false, error: 'Category name is required' });
   }
 
-  db.query(
-    'INSERT INTO categories (catName, catStatus) VALUES (?, ?)',
-    [catName, catStatus],
-    (err, results) => {
-      if (err) {
-        return res.status(500).json({ success: false, error: err.message });
-      }
-      res.json({ 
-        success: true, 
-        message: 'Category added successfully',
-        category: { id: results.insertId, catName, catStatus }
-      });
-    }
-  );
+  try {
+    const [results] = await promisePool.query(
+      'INSERT INTO categories (catName, catStatus) VALUES (?, ?)',
+      [catName, catStatus]
+    );
+    res.json({ 
+      success: true, 
+      message: 'Category added successfully',
+      category: { id: results.insertId, catName, catStatus }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Units API endpoints
-app.get('/api/units', (req, res) => {
-  db.query('SELECT * FROM units WHERE unitStatus = "Active"', (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+app.get('/api/units', async (req, res) => {
+  try {
+    const [results] = await promisePool.query('SELECT * FROM units WHERE unitStatus = "Active"');
     res.json({ success: true, units: results });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.post('/api/units', (req, res) => {
+app.post('/api/units', async (req, res) => {
   const { unitName, unitStatus = 'Active' } = req.body;
   
   if (!unitName) {
     return res.status(400).json({ success: false, error: 'Unit name is required' });
   }
 
-  db.query(
-    'INSERT INTO units (unitName, unitStatus) VALUES (?, ?)',
-    [unitName, unitStatus],
-    (err, results) => {
-      if (err) {
-        return res.status(500).json({ success: false, error: err.message });
-      }
-      res.json({ 
-        success: true, 
-        message: 'Unit added successfully',
-        unit: { id: results.insertId, unitName, unitStatus }
-      });
-    }
-  );
+  try {
+    const [results] = await promisePool.query(
+      'INSERT INTO units (unitName, unitStatus) VALUES (?, ?)',
+      [unitName, unitStatus]
+    );
+    res.json({ 
+      success: true, 
+      message: 'Unit added successfully',
+      unit: { id: results.insertId, unitName, unitStatus }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Restore original sales endpoint
-app.get('/api/sales', (req, res) => {
+app.get('/api/sales', async (req, res) => {
   const query = `
     SELECT o.orderID, o.orderNumber, o.orderDate, o.totalAmount, o.discountAmount, 
            IFNULL(ph.paidAmount, 0) as paidAmount, 
@@ -285,15 +351,8 @@ app.get('/api/sales', (req, res) => {
     ORDER BY o.orderDate DESC
   `;
 
-  db.query(query, (err, orders) => {
-    if (err) {
-      console.error('Database error:', err);
-      return res.status(500).json({ 
-        success: false, 
-        error: err.message,
-        details: 'Error fetching sales data'
-      });
-    }
+  try {
+    const [orders] = await promisePool.query(query);
 
     const orderIds = orders.map(order => order.orderID);
     if (orderIds.length === 0) {
@@ -308,30 +367,28 @@ app.get('/api/sales', (req, res) => {
       WHERE op.orderID IN (?)
     `;
 
-    db.query(productQuery, [orderIds], (err, products) => {
-      if (err) {
-        console.error('Database error:', err);
-        return res.status(500).json({ 
-          success: false, 
-          error: err.message,
-          details: 'Error fetching product data'
-        });
-      }
+    const [products] = await promisePool.query(productQuery, [orderIds]);
 
-      const sales = orders.map(order => {
-        return {
-          ...order,
-          products: products.filter(product => product.orderID === order.orderID)
-        };
-      });
-
-      res.json({ success: true, sales });
+    const sales = orders.map(order => {
+      return {
+        ...order,
+        products: products.filter(product => product.orderID === order.orderID)
+      };
     });
-  });
+
+    res.json({ success: true, sales });
+  } catch (err) {
+    console.error('Database error:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: err.message,
+      details: 'Error fetching sales data'
+    });
+  }
 });
 
 // Add endpoint to update order status
-app.patch('/api/sales/:id/status', (req, res) => {
+app.patch('/api/sales/:id/status', async (req, res) => {
   const orderId = req.params.id;
   const { status } = req.body;
 
@@ -342,34 +399,40 @@ app.patch('/api/sales/:id/status', (req, res) => {
     });
   }
 
-  const updateOrderStatus = (paymentStatus) => {
-    db.query(
-      'UPDATE orders SET orderStatus = ?, paymentStatus = ? WHERE orderID = ?',
-      [status, paymentStatus, orderId],
-      (err, results) => {
-        if (err) {
-          return res.status(500).json({ success: false, error: err.message });
-        }
-        if (results.affectedRows === 0) {
-          return res.status(404).json({ success: false, error: 'Order not found' });
-        }
-        res.json({ success: true, message: 'Order status updated successfully' });
+  const updateOrderStatus = async (paymentStatus) => {
+    try {
+      const [results] = await promisePool.query(
+        'UPDATE orders SET orderStatus = ?, paymentStatus = ? WHERE orderID = ?',
+        [status, paymentStatus, orderId]
+      );
+      if (results.affectedRows === 0) {
+        return res.status(404).json({ success: false, error: 'Order not found' });
       }
-    );
+      res.json({ success: true, message: 'Order status updated successfully' });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   };
 
   if (status === 'Cancelled') {
-    db.query('DELETE FROM payment_history WHERE orderID = ?', [orderId], (err, results) => {
-      if (err) {
-        return res.status(500).json({ success: false, error: err.message });
+    try {
+      await promisePool.query('DELETE FROM payment_history WHERE orderID = ?', [orderId]);
+      // Accounts ledger entry for refund, find sum of amount from payment history table using order id
+      const [results] = await promisePool.query('SELECT SUM(amount) as total FROM payment_history WHERE orderID = ?', [orderId]);
+      const refundAmount = results[0].total;
+      if (refundAmount > 0) {
+      await promisePool.query(
+        'INSERT INTO accounts (account_name, credit, debit, description, created_at) VALUES (?, ?, ?, ?, NOW())',
+        ['Refund', 0, refundAmount, `Refund for order #${orderId}`]
+      );
       }
       updateOrderStatus('Cancelled');
-    });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   } else {
-    db.query('SELECT orderStatus, paymentStatus FROM orders WHERE orderID = ?', [orderId], (err, results) => {
-      if (err) {
-        return res.status(500).json({ success: false, error: err.message });
-      }
+    try {
+      const [results] = await promisePool.query('SELECT orderStatus, paymentStatus FROM orders WHERE orderID = ?', [orderId]);
       if (results.length === 0) {
         return res.status(404).json({ success: false, error: 'Order not found' });
       }
@@ -377,110 +440,87 @@ app.patch('/api/sales/:id/status', (req, res) => {
       const currentPaymentStatus = results[0].paymentStatus;
       const paymentStatus = currentStatus === 'Cancelled' ? 'Unpaid' : currentPaymentStatus;
       updateOrderStatus(paymentStatus);
-    });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   }
 });
 
 // Add payment endpoint
-app.post('/api/sales/:id/payment', (req, res) => {
+app.post('/api/sales/:id/payment', async (req, res) => {
   const orderId = req.params.id;
   const { amount, paymentMethod, note } = req.body;
 
-  // Start a transaction
-  db.beginTransaction(err => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
-
+  const connection = await promisePool.getConnection();
+  try {
+    await connection.beginTransaction();
     // First insert the payment record
     const paymentQuery = `
       INSERT INTO payment_history (orderID, amount, paymentMethod, paymentDate, note)
       VALUES (?, ?, ?, NOW(), ?)
     `;
 
-    db.query(paymentQuery, [orderId, amount, paymentMethod, note], (err, paymentResult) => {
-      if (err) {
-        return db.rollback(() => {
-          res.status(500).json({ success: false, error: err.message });
-        });
-      }
+    const [paymentResult] = await connection.query(paymentQuery, [orderId, amount, paymentMethod, note]);
 
-      // Then get the current total paid amount for this order
-      const totalPaidQuery = `
-        SELECT SUM(amount) as totalPaid
-        FROM payment_history
-        WHERE orderID = ?
-      `;
+    // Then Add Paid Amount to accounts ledger
+    const ledgerQuery = `INSERT INTO accounts (account_name, credit, debit, description, created_at) VALUES (?, ?, ?, ?, NOW())`;
+    await connection.query(ledgerQuery, ['Sales', amount, 0, `Payment received for order #${orderId} via ${paymentMethod}`]);    
 
-      db.query(totalPaidQuery, [orderId], (err, totalPaidResult) => {
-        if (err) {
-          return db.rollback(() => {
-            res.status(500).json({ success: false, error: err.message });
-          });
-        }
+    // Then get the current total paid amount for this order
+    const totalPaidQuery = `
+      SELECT SUM(amount) as totalPaid
+      FROM payment_history
+      WHERE orderID = ?
+    `;
 
-        // Get order total amount
-        const orderQuery = `
-          SELECT totalAmount FROM orders WHERE orderID = ?
-        `;
+    const [totalPaidResult] = await connection.query(totalPaidQuery, [orderId]);
 
-        db.query(orderQuery, [orderId], (err, orderResult) => {
-          if (err) {
-            return db.rollback(() => {
-              res.status(500).json({ success: false, error: err.message });
-            });
-          }
+    // Get order total amount
+    const orderQuery = `
+      SELECT totalAmount FROM orders WHERE orderID = ?
+    `;
 
-          const totalPaid = totalPaidResult[0].totalPaid;
-          const orderTotal = orderResult[0].totalAmount;
-          
-          // Determine payment status
-          let paymentStatus = 'Unpaid';
-          if (totalPaid >= orderTotal) {
-            paymentStatus = 'Paid';
-          } else if (totalPaid > 0) {
-            paymentStatus = 'Partial';
-          }
+    const [orderResult] = await connection.query(orderQuery, [orderId]);
 
-          // Update order payment status
-          const updateQuery = `
-            UPDATE orders 
-            SET paymentStatus = ?
-            WHERE orderID = ?
-          `;
+    const totalPaid = totalPaidResult[0].totalPaid;
+    const orderTotal = orderResult[0].totalAmount;
+    
+    // Determine payment status
+    let paymentStatus = 'Unpaid';
+    if (totalPaid >= orderTotal) {
+      paymentStatus = 'Paid';
+    } else if (totalPaid > 0) {
+      paymentStatus = 'Partial';
+    }
 
-          db.query(updateQuery, [paymentStatus, orderId], (err, updateResult) => {
-            if (err) {
-              return db.rollback(() => {
-                res.status(500).json({ success: false, error: err.message });
-              });
-            }
+    // Update order payment status
+    const updateQuery = `
+      UPDATE orders 
+      SET paymentStatus = ?
+      WHERE orderID = ?
+    `;
 
-            // Commit the transaction
-            db.commit(err => {
-              if (err) {
-                return db.rollback(() => {
-                  res.status(500).json({ success: false, error: err.message });
-                });
-              }
+    await connection.query(updateQuery, [paymentStatus, orderId]);
 
-              res.json({
-                success: true,
-                message: 'Payment recorded successfully',
-                paymentId: paymentResult.insertId,
-                paymentStatus: paymentStatus,
-                totalPaid: totalPaid
-              });
-            });
-          });
-        });
-      });
+    await connection.commit();
+
+    res.json({
+      success: true,
+      message: 'Payment recorded successfully',
+      paymentId: paymentResult.insertId,
+      paymentStatus: paymentStatus,
+      totalPaid: totalPaid
     });
-  });
+  } catch (err) {
+    await connection.rollback();
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    connection.release();
+  }
 });
 
 // Restore original payments endpoint
-app.get('/api/payments', (req, res) => {
+app.get('/api/payments', async (req, res) => {
   const query = `
     SELECT 
       ph.paymentID,
@@ -499,20 +539,19 @@ app.get('/api/payments', (req, res) => {
     ORDER BY ph.paymentDate DESC
   `;
 
-  db.query(query, (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
-    
+  try {
+    const [results] = await promisePool.query(query);
     res.json({ 
       success: true, 
       payments: results 
     });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Get payment history for an order
-app.get('/api/sales/:id/payments', (req, res) => {
+app.get('/api/sales/:id/payments', async (req, res) => {
   const orderId = req.params.id;
 
   const query = `
@@ -529,27 +568,24 @@ app.get('/api/sales/:id/payments', (req, res) => {
     ORDER BY ph.paymentDate DESC
   `;
 
-  db.query(query, [orderId], (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
-    
+  try {
+    const [results] = await promisePool.query(query, [orderId]);
     res.json({ 
       success: true, 
       payments: results 
     });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Delete payment endpoint
-app.delete('/api/payments/:id', (req, res) => {
+app.delete('/api/payments/:id', async (req, res) => {
   const paymentId = req.params.id;
 
-  // Start a transaction
-  db.beginTransaction(err => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  const connection = await promisePool.getConnection();
+  try {
+    await connection.beginTransaction();
 
     // First get the payment and order details
     const getPaymentQuery = `
@@ -559,101 +595,78 @@ app.delete('/api/payments/:id', (req, res) => {
       WHERE ph.paymentID = ?
     `;
 
-    db.query(getPaymentQuery, [paymentId], (err, paymentResults) => {
-      if (err) {
-        return db.rollback(() => {
-          res.status(500).json({ success: false, error: err.message });
-        });
-      }
+    const [paymentResults] = await connection.query(getPaymentQuery, [paymentId]);
 
-      if (paymentResults.length === 0) {
-        return db.rollback(() => {
-          res.status(404).json({ success: false, error: 'Payment not found' });
-        });
-      }
+    if (paymentResults.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, error: 'Payment not found' });
+    }
 
-      const { orderID, totalAmount } = paymentResults[0];
+    const { orderID, totalAmount } = paymentResults[0];
 
-      // Delete the payment
-      db.query('DELETE FROM payment_history WHERE paymentID = ?', [paymentId], (err) => {
-        if (err) {
-          return db.rollback(() => {
-            res.status(500).json({ success: false, error: err.message });
-          });
-        }
+    // Delete the payment
+    await connection.query('DELETE FROM payment_history WHERE paymentID = ?', [paymentId]);
 
-        // Calculate remaining total paid amount
-        db.query(
-          'SELECT COALESCE(SUM(amount), 0) as totalPaid FROM payment_history WHERE orderID = ?',
-          [orderID],
-          (err, totalPaidResults) => {
-            if (err) {
-              return db.rollback(() => {
-                res.status(500).json({ success: false, error: err.message });
-              });
-            }
+    // Then Debit the accounts ledger
+    await connection.query(
+      'INSERT INTO accounts (account_name, credit, debit, description, created_at) VALUES (?, ?, ?, ?, NOW())',
+      ['Sales', 0, paymentResults[0].amount, `Payment deleted for order #${orderID}`]
+    );    
 
-            const totalPaid = totalPaidResults[0].totalPaid;
-            
-            // Determine new payment status
-            let paymentStatus = 'Unpaid';
-            if (totalPaid >= totalAmount) {
-              paymentStatus = 'Paid';
-            } else if (totalPaid > 0) {
-              paymentStatus = 'Partial';
-            }
+    // Calculate remaining total paid amount
+    const [totalPaidResults] = await connection.query(
+      'SELECT COALESCE(SUM(amount), 0) as totalPaid FROM payment_history WHERE orderID = ?',
+      [orderID]
+    );
 
-            // Update order payment status
-            db.query(
-              'UPDATE orders SET paymentStatus = ? WHERE orderID = ?',
-              [paymentStatus, orderID],
-              (err) => {
-                if (err) {
-                  return db.rollback(() => {
-                    res.status(500).json({ success: false, error: err.message });
-                  });
-                }
+    const totalPaid = totalPaidResults[0].totalPaid;
+    
+    // Determine new payment status
+    let paymentStatus = 'Unpaid';
+    if (totalPaid >= totalAmount) {
+      paymentStatus = 'Paid';
+    } else if (totalPaid > 0) {
+      paymentStatus = 'Partial';
+    }
 
-                // Commit the transaction
-                db.commit(err => {
-                  if (err) {
-                    return db.rollback(() => {
-                      res.status(500).json({ success: false, error: err.message });
-                    });
-                  }
+    // Update order payment status
+    await connection.query(
+      'UPDATE orders SET paymentStatus = ? WHERE orderID = ?',
+      [paymentStatus, orderID]
+    );
 
-                  res.json({
-                    success: true,
-                    message: 'Payment deleted successfully',
-                    paymentStatus,
-                    remainingPaid: totalPaid
-                  });
-                });
-              }
-            );
-          }
-        );
-      });
+    await connection.commit();
+
+    res.json({
+      success: true,
+      message: 'Payment deleted successfully',
+      paymentStatus,
+      remainingPaid: totalPaid
     });
-  });
+  } catch (err) {
+    await connection.rollback();
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    connection.release();
+  }
 });
 
 // Todo API endpoints
-app.get('/api/todos', (req, res) => {
-  db.query('SELECT * FROM todos ORDER BY createdAt DESC', (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+app.get('/api/todos', async (req, res) => {
+  try {
+    const [results] = await promisePool.query('SELECT * FROM todos ORDER BY createdAt DESC');
     // Convert MySQL tinyint (0/1) to boolean for isImportant
     const todos = results.map(todo => ({
       ...todo,
       isImportant: Boolean(todo.isImportant)
     }));
     res.json({ success: true, todos });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.post('/api/todos', (req, res) => {
+app.post('/api/todos', async (req, res) => {
   const { title, tag, priority, status, description } = req.body;
   
   const todo = {
@@ -665,81 +678,81 @@ app.post('/api/todos', (req, res) => {
     createdAt: new Date()
   };
 
-  db.query('INSERT INTO todos SET ?', todo, (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    const [results] = await promisePool.query('INSERT INTO todos SET ?', todo);
     res.json({
       success: true,
       todo: { ...todo, id: results.insertId }
     });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.put('/api/todos/:id', (req, res) => {
+app.put('/api/todos/:id', async (req, res) => {
   const todoId = req.params.id;
   const updates = req.body;
 
-  db.query('UPDATE todos SET ? WHERE id = ?', [updates, todoId], (err) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    await promisePool.query('UPDATE todos SET ? WHERE id = ?', [updates, todoId]);
     res.json({
       success: true,
       todo: { ...updates, id: todoId }
     });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Change delete endpoint to update status instead
-app.delete('/api/todos/:id', (req, res) => {
+app.delete('/api/todos/:id', async (req, res) => {
   const todoId = req.params.id;
   const updates = { status: 'deleted' };
 
-  db.query('UPDATE todos SET ? WHERE id = ?', [updates, todoId], (err) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    await promisePool.query('UPDATE todos SET ? WHERE id = ?', [updates, todoId]);
     res.json({
       success: true,
       message: 'Todo moved to trash successfully'
     });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Add new endpoint for permanent deletion
-app.delete('/api/todos/:id/permanent', (req, res) => {
+app.delete('/api/todos/:id/permanent', async (req, res) => {
   const todoId = req.params.id;
 
-  db.query('DELETE FROM todos WHERE id = ?', [todoId], (err) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    await promisePool.query('DELETE FROM todos WHERE id = ?', [todoId]);
     res.json({
       success: true,
       message: 'Todo permanently deleted'
     });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Add restore from trash endpoint
-app.patch('/api/todos/:id/restore', (req, res) => {
+app.patch('/api/todos/:id/restore', async (req, res) => {
   const todoId = req.params.id;
   const updates = { status: 'pending' };
 
-  db.query('UPDATE todos SET ? WHERE id = ?', [updates, todoId], (err) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    await promisePool.query('UPDATE todos SET ? WHERE id = ?', [updates, todoId]);
     res.json({
       success: true,
       message: 'Todo restored successfully'
     });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Add new endpoint to get todo counts
-app.get('/api/todos/counts', (req, res) => {
+app.get('/api/todos/counts', async (req, res) => {
   const query = `
     SELECT 
       COUNT(CASE WHEN status = 'pending' THEN 1 END) as inbox,
@@ -749,19 +762,19 @@ app.get('/api/todos/counts', (req, res) => {
     FROM todos
   `;
 
-  db.query(query, (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    const [results] = await promisePool.query(query);
     res.json({ 
       success: true, 
       counts: results[0]
     });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Get all expenses
-app.get('/api/expenses', (req, res) => {
+app.get('/api/expenses', async (req, res) => {
   const query = `
     SELECT t1.*, t2.name AS catName, t2.id AS catId FROM expenses t1 
     LEFT JOIN expense_categories t2 ON t1.category = t2.id 
@@ -769,31 +782,31 @@ app.get('/api/expenses', (req, res) => {
     ORDER BY t1.createdAt DESC
   `;
   
-  db.query(query, (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    const [results] = await promisePool.query(query);
     res.json({ success: true, expenses: results });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Get single expense
-app.get('/api/expenses/:id', (req, res) => {
+app.get('/api/expenses/:id', async (req, res) => {
   const expenseId = req.params.id;
   
-  db.query('SELECT * FROM expenses WHERE id = ?', [expenseId], (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    const [results] = await promisePool.query('SELECT * FROM expenses WHERE id = ?', [expenseId]);
     if (results.length === 0) {
       return res.status(404).json({ success: false, error: 'Expense not found' });
     }
     res.json({ success: true, expense: results[0] });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Create new expense
-app.post('/api/expenses', (req, res) => {
+app.post('/api/expenses', async (req, res) => {
   const { 
     category,
     amount,
@@ -815,20 +828,44 @@ app.post('/api/expenses', (req, res) => {
     createdAt: new Date()
   };
 
-  db.query('INSERT INTO expenses SET ?', expense, (err, result) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  // Start a transaction to ensure data consistency
+  const connection = await promisePool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // Insert the expense into the expenses table
+    const [expenseResult] = await connection.query('INSERT INTO expenses SET ?', expense);
+
+    // Update the accounts ledger with the expense
+    const ledgerQuery = `
+      INSERT INTO accounts (account_name, credit, debit, description, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `;
+    await connection.query(ledgerQuery, ['Expenses', 0, amount, `Expense for ${expenseFor}`, expenseDate]);
+
+    // Commit the transaction if both queries succeed
+    await connection.commit();
+
+    // Return the response with the inserted expense
     res.json({
       success: true,
       message: 'Expense added successfully',
-      expense: { ...expense, id: result.insertId }
+      expense: { ...expense, id: expenseResult.insertId }
     });
-  });
+  } catch (err) {
+    // Rollback the transaction in case of an error
+    await connection.rollback();
+    console.error('Error adding expense and ledger entry:', err);
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    // Release the connection back to the pool
+    connection.release();
+  }
 });
 
+
 // Update expense
-app.put('/api/expenses/:id', (req, res) => {
+app.put('/api/expenses/:id', async (req, res) => {
   const expenseId = req.params.id;
   const updates = req.body;
 
@@ -836,33 +873,30 @@ app.put('/api/expenses/:id', (req, res) => {
     updates.amount = parseFloat(updates.amount);
   }
 
-  db.query(
-    'UPDATE expenses SET ? WHERE id = ?',
-    [updates, expenseId],
-    (err, result) => {
-      if (err) {
-        return res.status(500).json({ success: false, error: err.message });
-      }
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ success: false, error: 'Expense not found' });
-      }
-      res.json({
-        success: true,
-        message: 'Expense updated successfully',
-        expense: { id: expenseId, ...updates }
-      });
+  try {
+    const [result] = await promisePool.query(
+      'UPDATE expenses SET ? WHERE id = ?',
+      [updates, expenseId]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, error: 'Expense not found' });
     }
-  );
+    res.json({
+      success: true,
+      message: 'Expense updated successfully',
+      expense: { id: expenseId, ...updates }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Delete expense
-app.delete('/api/expenses/:id', (req, res) => {
+app.delete('/api/expenses/:id', async (req, res) => {
   const expenseId = req.params.id;
 
-  db.query('DELETE FROM expenses WHERE id = ?', [expenseId], (err, result) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    const [result] = await promisePool.query('DELETE FROM expenses WHERE id = ?', [expenseId]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, error: 'Expense not found' });
     }
@@ -870,23 +904,25 @@ app.delete('/api/expenses/:id', (req, res) => {
       success: true, 
       message: 'Expense deleted successfully' 
     });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Get all expense categories
-app.get('/api/expense-categories', (req, res) => {
+app.get('/api/expense-categories', async (req, res) => {
   const query = 'SELECT * FROM expense_categories ORDER BY name';
   
-  db.query(query, (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    const [results] = await promisePool.query(query);
     res.json({ success: true, categories: results });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Create new expense category
-app.post('/api/expense-categories', (req, res) => {
+app.post('/api/expense-categories', async (req, res) => {
   const { name, description } = req.body;
 
   if (!name) {
@@ -899,50 +935,47 @@ app.post('/api/expense-categories', (req, res) => {
     createdAt: new Date()
   };
 
-  db.query('INSERT INTO expense_categories SET ?', category, (err, result) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    const [result] = await promisePool.query('INSERT INTO expense_categories SET ?', category);
     res.json({
       success: true,
       message: 'Category added successfully',
       category: { ...category, id: result.insertId }
     });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Update expense category
-app.put('/api/expense-categories/:id', (req, res) => {
+app.put('/api/expense-categories/:id', async (req, res) => {
   const categoryId = req.params.id;
   const updates = req.body;
 
-  db.query(
-    'UPDATE expense_categories SET ? WHERE id = ?',
-    [updates, categoryId],
-    (err, result) => {
-      if (err) {
-        return res.status(500).json({ success: false, error: err.message });
-      }
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ success: false, error: 'Category not found' });
-      }
-      res.json({
-        success: true,
-        message: 'Category updated successfully',
-        category: { id: categoryId, ...updates }
-      });
+  try {
+    const [result] = await promisePool.query(
+      'UPDATE expense_categories SET ? WHERE id = ?',
+      [updates, categoryId]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, error: 'Category not found' });
     }
-  );
+    res.json({
+      success: true,
+      message: 'Category updated successfully',
+      category: { id: categoryId, ...updates }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Delete expense category
-app.delete('/api/expense-categories/:id', (req, res) => {
+app.delete('/api/expense-categories/:id', async (req, res) => {
   const categoryId = req.params.id;
 
-  db.query('DELETE FROM expense_categories WHERE id = ?', [categoryId], (err, result) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    const [result] = await promisePool.query('DELETE FROM expense_categories WHERE id = ?', [categoryId]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, error: 'Category not found' });
     }
@@ -950,35 +983,37 @@ app.delete('/api/expense-categories/:id', (req, res) => {
       success: true, 
       message: 'Category deleted successfully' 
     });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Add customers endpoint
-app.get('/api/customers', (req, res) => {
-  db.query('SELECT * FROM users', (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+app.get('/api/customers', async (req, res) => {
+  try {
+    const [results] = await promisePool.query('SELECT * FROM users');
     res.json({ success: true, customers: results });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Get all employees
-app.get('/api/employees', (req, res) => {
+app.get('/api/employees', async (req, res) => {
   const query = `
     SELECT * FROM employees ORDER BY empID ASC
   `;
   
-  db.query(query, (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    const [results] = await promisePool.query(query);
     res.json({ success: true, employees: results });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Create new employee
-app.post('/api/employees', (req, res) => {
+app.post('/api/employees', async (req, res) => {
   const {
     name,
     address,
@@ -1006,19 +1041,446 @@ app.post('/api/employees', (req, res) => {
     lastLoginTime: null
   };
 
-  db.query('INSERT INTO employees SET ?', employee, (err, result) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
-    
+  try {
+    const [result] = await promisePool.query('INSERT INTO employees SET ?', employee);
     res.json({
       success: true, 
       message: 'Employee created successfully',
       employee: { ...employee, empId: result.insertId }
     });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.listen(port, () => {
+// Employee login endpoint
+app.post('/api/employees/login', async (req, res) => {
+  const { loginName, password } = req.body;
+
+  const query = `
+    SELECT * 
+    FROM employees 
+    WHERE loginName = ? AND loginPassword = ? AND status = 'Active'
+  `;
+  
+  try {
+    const [results] = await promisePool.query(query, [loginName, password]);
+    if (results.length === 0) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Invalid login credentials' 
+      });
+    }
+
+    // Update last login time
+    const employee = results[0];
+    await promisePool.query(
+      'UPDATE employees SET lastLoginTime = NOW() WHERE empID = ?',
+      [employee.empID]
+    );
+
+    res.json({ 
+      success: true, 
+      employee: {
+        empID: employee.empId,
+        name: employee.name,
+        address: employee.address,
+        mobile: employee.mobile,
+        email: employee.email,
+        designation: employee.designation,
+        imageUrl: employee.imageUrl,
+        loginName: employee.loginName,
+        loginPassword: employee.loginPassword
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error' 
+    });
+  }
+});
+
+// Update employee profile endpoint
+app.put('/api/employees/:id', async (req, res) => {
+  const employeeId = req.params.id;
+  const updates = req.body;
+
+  try {
+    const [result] = await promisePool.query(
+      'UPDATE employees SET ? WHERE empID = ?',
+      [updates, employeeId]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Employee not found' 
+      });
+    }
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      employee: { ...updates, empId: employeeId }
+    });
+  } catch (err) {
+    res.status(500).json({ 
+      success: false, 
+      error: err.message 
+    });
+  }
+});
+
+// Dashboard stats endpoint
+app.get('/api/dashboard/stats', async (req, res) => {
+  const queries = {
+    totalSales: 'SELECT COALESCE(SUM(totalAmount), 0) as total FROM orders WHERE orderStatus != "Cancelled"',
+    totalExpense: 'SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE status = "Active"',
+    totalCustomers: 'SELECT COUNT(*) as total FROM users',
+    totalInvoices: 'SELECT COUNT(*) as total FROM orders WHERE orderStatus != "Cancelled"'
+  };
+
+  try {
+    const stats = {};
+    await Promise.all(
+      Object.entries(queries).map(async ([key, query]) => {
+        const [results] = await promisePool.query(query);
+        stats[key] = results[0].total;
+      })
+    );
+
+    res.json({
+      success: true,
+      stats
+    });
+  } catch (err) {
+    console.error('Error fetching dashboard stats:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: err.message 
+    });
+  }
+});
+
+// Dashboard graph data endpoint
+app.get('/api/dashboard/graph', async (req, res) => {
+  const year = req.query.year || new Date().getFullYear();
+  
+  const query = `
+    SELECT 
+      MONTH(orderDate) as month,
+      COALESCE(SUM(totalAmount), 0) as total
+    FROM orders 
+    WHERE 
+      YEAR(orderDate) = ? 
+      AND orderStatus != 'Cancelled'
+    GROUP BY MONTH(orderDate)
+    ORDER BY month
+  `;
+
+  try {
+    const [results] = await promisePool.query(query, [year]);
+    
+    // Initialize array with zeros for all 12 months
+    const monthlyData = Array(12).fill(0);
+
+    // Fill in actual data where we have it
+    results.forEach(row => {
+      monthlyData[row.month - 1] = Number(row.total);
+    });
+
+    res.json({
+      success: true,
+      data: {
+        series: [{
+          name: 'Sales',
+          data: monthlyData
+        }]
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ 
+      success: false, 
+      error: err.message 
+    });
+  }
+});
+
+// Get available years from orders
+app.get('/api/dashboard/years', async (req, res) => {
+  const query = `
+    SELECT DISTINCT YEAR(orderDate) as year 
+    FROM orders 
+    WHERE orderStatus != 'Cancelled'
+    ORDER BY year DESC
+  `;
+
+  try {
+    const [results] = await promisePool.query(query);
+    const years = results.map(row => row.year);
+    res.json({
+      success: true,
+      years: years.length > 0 ? years : [new Date().getFullYear()]
+    });
+  } catch (err) {
+    res.status(500).json({ 
+      success: false, 
+      error: err.message 
+    });
+  }
+});
+
+// Delivery Dashboard
+app.get('/api/dashboard/delivery-stats', async (req, res) => {
+  const queries = {
+    canceledDeliveries: 'SELECT COUNT(*) as total FROM orders WHERE orderStatus = "Cancelled"',
+    completedDeliveries: 'SELECT COUNT(*) as total FROM orders WHERE orderStatus = "Completed"',
+    pendingDeliveries: 'SELECT COUNT(*) as total FROM orders WHERE orderStatus = "Processing"',
+    totalDeliveries: 'SELECT COUNT(*) as total FROM orders WHERE orderStatus != "Cancelled"'
+  };
+
+  try {
+    const stats = {};
+    await Promise.all(
+      Object.entries(queries).map(async ([key, query]) => {
+        const [results] = await promisePool.query(query);
+        stats[key] = results[0].total;
+      })
+    );
+
+    res.json({
+      success: true,
+      stats
+    });
+  } catch (err) {
+    console.error('Error fetching dashboard stats:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: err.message 
+    });
+  }
+});
+
+// Notifications endpoints
+app.get('/api/notifications', async (req, res) => {
+  const query = `
+    SELECT 
+      n.*,
+      CASE WHEN nr.notificationId IS NOT NULL THEN true ELSE false END as isRead
+    FROM notifications n
+    LEFT JOIN notification_reads nr ON n.id = nr.notificationId 
+    ORDER BY n.createdAt DESC
+    LIMIT 50
+  `;
+  
+  try {
+    const [results] = await promisePool.query(query);
+    res.json({ success: true, notifications: results });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/notifications/unread-count', async (req, res) => {
+  const query = `
+    SELECT COUNT(*) as count 
+    FROM notifications n 
+    LEFT JOIN notification_reads nr ON n.id = nr.notificationId
+    WHERE nr.notificationId IS NULL
+  `;
+  
+  try {
+    const [results] = await promisePool.query(query);
+    res.json({ success: true, count: results[0].count });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/notifications/:id/read', async (req, res) => {
+  const notificationId = req.params.id;
+  const userId = req.body.userId;
+
+  const query = `
+    INSERT IGNORE INTO notification_reads (notificationId, userId, readAt)
+    VALUES (?, ?, NOW())
+  `;
+  
+  try {
+    await promisePool.query(query, [notificationId, userId]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// WebSocket connection handling
+wss.on('connection', (ws) => {
+  console.log('New WebSocket connection');
+
+  ws.on('error', console.error);
+});
+
+// Function to broadcast new notifications
+const broadcastNotification = (notification) => {
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ type: 'NEW_NOTIFICATION', notification }));
+    }
+  });
+};
+
+// Add a health check endpoint
+app.get('/api/health', async (req, res) => {
+  try {
+    await executeQuery('SELECT 1');
+    res.json({
+      success: true,
+      status: 'healthy',
+      database: 'connected'
+    });
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      status: 'unhealthy',
+      database: 'disconnected',
+      error: error.message
+    });
+  }
+});
+
+// Graceful shutdown handling
+process.on('SIGINT', async () => {
+  try {
+    await pool.end();
+    console.log('Database pool closed.');
+    process.exit(0);
+  } catch (err) {
+    console.error('Error closing database pool:', err);
+    process.exit(1);
+  }
+});
+
+// Add unique order number generator
+const generateUniqueOrderNumber = async (connection, orderDate) => {
+  // Format orderDate as RPYYYYMM
+  const year = orderDate.getFullYear();
+  const month = ('0' + (orderDate.getMonth() + 1)).slice(-2);
+  const prefix = "RP" + year + month;
+  const searchString = prefix + '%';
+  
+  const [rows] = await connection.query(
+    'SELECT COUNT(*) as count FROM orders WHERE orderNumber LIKE ?',
+    [searchString]
+  );
+  const count = rows[0]?.count || 0;
+  return prefix + String(count + 1).padStart(4, '0');
+};
+
+app.post('/api/sales', async (req, res) => {
+  const {
+    totalAmount,
+    discountAmount,
+    orderStatus,
+    customerID,
+    shippingAddress,
+    plusCode,
+    latitude,
+    longitude,
+    paymentMethod,
+    paymentStatus,
+    products
+  } = req.body;
+
+  console.log('Received sales data:', req.body); // Log the entire request body
+
+  // Validate required fields
+  if (!customerID || !products || !products.length) {
+    const errorMessage = 'Missing required fields: customerID and products are required';
+    console.error(errorMessage);
+    return res.status(400).json({ success: false, error: errorMessage });
+  }
+
+  // Validate products structure
+  for (const product of products) {
+    if (!product.productID || !product.quantity || !product.price) {
+      const errorMessage = 'Invalid product data: each product must have productID, quantity, and price';
+      console.error(errorMessage);
+      return res.status(400).json({ success: false, error: errorMessage });
+    }
+  }
+  
+  const orderDate = new Date();
+  const connection = await promisePool.getConnection();
+  
+  try {
+    await connection.beginTransaction();
+    
+    // Generate orderNumber
+    const orderNumber = await generateUniqueOrderNumber(connection, orderDate);
+    console.log('Generated order number:', orderNumber);
+    
+    // Insert order record
+    // Correct column names here
+    const [orderResult] = await connection.query(
+      `INSERT INTO orders (
+        orderNumber, orderDate, totalAmount, discountAmount, 
+        orderStatus, customerID, shippingAddress, plusCode, 
+        latitude, longitude, paymentMethod, paymentStatus
+      ) VALUES (?, Now(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        orderNumber,
+        totalAmount || 0,
+        discountAmount || 0,
+        orderStatus || 'Confirmed',
+        customerID,
+        shippingAddress || '',
+        plusCode || '',
+        latitude || 0,
+        longitude || 0,
+        paymentMethod || 'Cash on Delivery',
+        paymentStatus || 'Unpaid'
+      ]
+    );
+    
+    const insertedOrderID = orderResult.insertId;
+    console.log('Inserted order ID:', insertedOrderID);
+    
+    // Insert order details
+    const orderDetailsQuery = `
+      INSERT INTO order_details (orderID, productID, quantity, price)
+      VALUES ?
+    `;
+    const orderDetailsValues = products.map(product => [
+      insertedOrderID,
+      product.productID,
+      product.quantity,
+      product.price
+    ]);
+
+    console.log('Order details values:', orderDetailsValues);
+
+    await connection.query(orderDetailsQuery, [orderDetailsValues]);
+    
+    await connection.commit();
+    res.json({ 
+      success: true, 
+      orderID: insertedOrderID, 
+      orderNumber 
+    });
+
+  } catch (err) {
+    await connection.rollback();
+    console.error('Error creating sale:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Error creating sale: ' + err.message
+    });
+  } finally {
+    connection.release();
+  }
+});
+
+// Replace app.listen with server.listen
+server.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });

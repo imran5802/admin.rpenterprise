@@ -153,3 +153,8 @@ export const setLayoutChange = (payload) => ({
   type: "Layoutstyle_data",
   payload,
 });
+
+export const setAuth = (payload) => ({
+  type: "SET_AUTH",
+  payload,
+});

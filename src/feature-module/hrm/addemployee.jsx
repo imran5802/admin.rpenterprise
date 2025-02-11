@@ -81,7 +81,7 @@ const AddEmployee = () => {
     }
 
     try {
-      const response = await axios.post('http://localhost:3006/api/employees', {
+      const response = await axios.post(`${process.env.REACT_APP_API_BASE_URL}/api/employees`, {
         name: formData.name,
         address: formData.address,
         mobile: formData.mobile,

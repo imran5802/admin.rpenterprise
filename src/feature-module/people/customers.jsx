@@ -11,7 +11,7 @@ const Customers = () => {
 
   const fetchCustomers = async () => {
     try {
-      const response = await fetch('http://localhost:3006/api/customers');
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/customers`);
       const data = await response.json();
       if (data.success) {
         setCustomers(data.customers);

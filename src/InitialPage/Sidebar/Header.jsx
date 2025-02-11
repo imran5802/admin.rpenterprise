@@ -3,13 +3,25 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import FeatherIcon from "feather-icons-react";
 import ImageWithBasePath from "../../core/img/imagewithbasebath";
-// import { Search, XCircle } from "react-feather";
+import { useDispatch } from "react-redux";
+import { useNavigate } from "react-router-dom";
+import { authService } from "../../services/authService";
+import { setAuth } from "../../core/redux/action";
 import { all_routes } from "../../Router/all_routes";
+import { useSelector } from "react-redux";
+import { formatDistanceToNow } from 'date-fns';
 
 const Header = () => {
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
   const route = all_routes;
   const [toggle, SetToggle] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const auth = useSelector((state) => state.auth);
+
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [ws, setWs] = useState(null);
 
   const isElementVisible = (element) => {
     return element.offsetWidth > 0 || element.offsetHeight > 0;
@@ -97,6 +109,79 @@ const Header = () => {
       );
     };
   }, []);
+
+  useEffect(() => {
+    // Determine if we're on HTTPS and set WebSocket protocol accordingly
+    const wsUrl = `${process.env.REACT_APP_API_BASE_URL}`;
+    
+    const websocket = new WebSocket(wsUrl);
+    
+    websocket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'NEW_NOTIFICATION') {
+        setNotifications(prev => [data.notification, ...prev]);
+        setUnreadCount(prev => prev + 1);
+      }
+    };
+
+    setWs(websocket);
+
+    return () => {
+      websocket.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const baseUrl = `${process.env.REACT_APP_API_BASE_URL}`;
+        
+        const [notificationsRes, countRes] = await Promise.all([
+          fetch(`${baseUrl}/api/notifications`),
+          fetch(`${baseUrl}/api/notifications/unread-count`)
+        ]);
+        
+        const notificationsData = await notificationsRes.json();
+        const countData = await countRes.json();
+
+        if (notificationsData.success) {
+          setNotifications(notificationsData.notifications);
+        }
+        
+        if (countData.success) {
+          setUnreadCount(countData.count);
+        }
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
+      }
+    };
+
+    fetchNotifications();
+  }, []);
+
+  const handleNotificationClick = async (notificationId) => {
+    if (!auth) return;
+
+    try {
+      await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/notifications/${notificationId}/read`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId: auth.empID })
+      });
+
+      setNotifications(notifications.map(notification => 
+        notification.id === notificationId 
+          ? { ...notification, isRead: true }
+          : notification
+      ));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
   const handlesidebar = () => {
     document.body.classList.toggle("mini-sidebar");
     SetToggle((current) => !current);
@@ -114,17 +199,6 @@ const Header = () => {
   };
 
   let pathname = location.pathname;
-
-  const exclusionArray = [
-    "/reactjs/template/dream-pos/index-three",
-    "/reactjs/template/dream-pos/index-one",
-  ];
-  if (exclusionArray.indexOf(window.location.pathname) >= 0) {
-    return "";
-  }
-
-
-
 
   const toggleFullscreen = (elem) => {
     elem = elem || document.documentElement;
@@ -154,6 +228,49 @@ const Header = () => {
         document.webkitExitFullscreen();
       }
     }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+      dispatch(setAuth(null));
+      navigate('/auth/signin', { replace: true });
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
+  // Get user's display name
+  const getUserDisplayName = () => {
+    if (auth) {
+      return auth.name || 'No Name';
+    }
+    return 'No Name';
+  };
+
+  // Get user's role/designation
+  const getUserRole = () => {
+    if (auth) {
+      return auth.designation || 'No Role';
+    }
+    return 'No Role';
+  };
+
+  // Get user's profile image
+  const getProfileImage = () => {
+    if (auth) {
+      return auth.imageUrl || "assets/img/profiles/avatar-01.jpg";
+    }
+    return null;
+  };
+
+  // Get user's initials for avatar
+  const getInitials = (name) => {
+    if (!name) return 'U';
+    return name.split(' ')
+      .map(word => word.charAt(0))
+      .join('')
+      .toUpperCase();
   };
 
   return (
@@ -204,215 +321,6 @@ const Header = () => {
         </Link>
         {/* Header Menu */}
         <ul className="nav user-menu">
-          {/* Search */}
-          {/* <li className="nav-item nav-searchinputs">
-            <div className="top-nav-search">
-              <Link to="#" className="responsive-search">
-                <Search />
-              </Link>
-              <form action="#" className="dropdown">
-                <div
-                  className="searchinputs dropdown-toggle"
-                  id="dropdownMenuClickable"
-                  data-bs-toggle="dropdown"
-                  data-bs-auto-close="false"
-                >
-                  <input type="text" placeholder="Search" />
-                  <div className="search-addon">
-                    <span>
-                      <XCircle className="feather-14" />
-                    </span>
-                  </div>
-                </div>
-                <div
-                  className="dropdown-menu search-dropdown"
-                  aria-labelledby="dropdownMenuClickable"
-                >
-                  <div className="search-info">
-                    <h6>
-                      <span>
-                        <i data-feather="search" className="feather-16" />
-                      </span>
-                      Recent Searches
-                    </h6>
-                    <ul className="search-tags">
-                      <li>
-                        <Link to="#">Products</Link>
-                      </li>
-                      <li>
-                        <Link to="#">Sales</Link>
-                      </li>
-                      <li>
-                        <Link to="#">Applications</Link>
-                      </li>
-                    </ul>
-                  </div>
-                  <div className="search-info">
-                    <h6>
-                      <span>
-                        <i data-feather="help-circle" className="feather-16" />
-                      </span>
-                      Help
-                    </h6>
-                    <p>
-                      How to Change Product Volume from 0 to 200 on Inventory
-                      management
-                    </p>
-                    <p>Change Product Name</p>
-                  </div>
-                  <div className="search-info">
-                    <h6>
-                      <span>
-                        <i data-feather="user" className="feather-16" />
-                      </span>
-                      Customers
-                    </h6>
-                    <ul className="customers">
-                      <li>
-                        <Link to="#">
-                          Aron Varu
-                          <ImageWithBasePath
-                            src="assets/img/profiles/avator1.jpg"
-                            alt="img"
-                            className="img-fluid"
-                          />
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#">
-                          Jonita
-                          <ImageWithBasePath
-                            src="assets/img/profiles/avatar-01.jpg"
-                            alt="img"
-                            className="img-fluid"
-                          />
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#">
-                          Aaron
-                          <ImageWithBasePath
-                            src="assets/img/profiles/avatar-10.jpg"
-                            alt="img"
-                            className="img-fluid"
-                          />
-                        </Link>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </form>
-            </div>
-          </li> */}
-          {/* /Search */}
-
-          {/* Select Store */}
-          {/* <li className="nav-item dropdown has-arrow main-drop select-store-dropdown">
-            <Link
-              to="#"
-              className="dropdown-toggle nav-link select-store"
-              data-bs-toggle="dropdown"
-            >
-              <span className="user-info">
-                <span className="user-letter">
-                  <ImageWithBasePath
-                    src="assets/img/store/store-01.png"
-                    alt="Store Logo"
-                    className="img-fluid"
-                  />
-                </span>
-                <span className="user-detail">
-                  <span className="user-name">Select Store</span>
-                </span>
-              </span>
-            </Link>
-            <div className="dropdown-menu dropdown-menu-right">
-              <Link to="#" className="dropdown-item">
-                <ImageWithBasePath
-                  src="assets/img/store/store-01.png"
-                  alt="Store Logo"
-                  className="img-fluid"
-                />{" "}
-                Grocery Alpha
-              </Link>
-              <Link to="#" className="dropdown-item">
-                <ImageWithBasePath
-                  src="assets/img/store/store-02.png"
-                  alt="Store Logo"
-                  className="img-fluid"
-                />{" "}
-                Grocery Apex
-              </Link>
-              <Link to="#" className="dropdown-item">
-                <ImageWithBasePath
-                  src="assets/img/store/store-03.png"
-                  alt="Store Logo"
-                  className="img-fluid"
-                />{" "}
-                Grocery Bevy
-              </Link>
-              <Link to="#" className="dropdown-item">
-                <ImageWithBasePath
-                  src="assets/img/store/store-04.png"
-                  alt="Store Logo"
-                  className="img-fluid"
-                />{" "}
-                Grocery Eden
-              </Link>
-            </div>
-          </li> */}
-          {/* /Select Store */}
-
-          {/* Flag */}
-          {/* <li className="nav-item dropdown has-arrow flag-nav nav-item-box">
-            <Link
-              className="nav-link dropdown-toggle"
-              data-bs-toggle="dropdown"
-              to="#"
-              role="button"
-            >
-              <ImageWithBasePath
-                src="assets/img/flags/us.png"
-                alt="img"
-                height={16}
-              />
-            </Link>
-            <div className="dropdown-menu dropdown-menu-right">
-              <Link to="#" className="dropdown-item active">
-                <ImageWithBasePath
-                  src="assets/img/flags/us.png"
-                  alt="img"
-                  height={16}
-                />
-                English
-              </Link>
-              <Link to="#" className="dropdown-item">
-                <ImageWithBasePath
-                  src="assets/img/flags/fr.png"
-                  alt="img"
-                  height={16}
-                />{" "}
-                French
-              </Link>
-              <Link to="#" className="dropdown-item">
-                <ImageWithBasePath
-                  src="assets/img/flags/es.png"
-                  alt="img"
-                  height={16}
-                />{" "}
-                Spanish
-              </Link>
-              <Link to="#" className="dropdown-item">
-                <ImageWithBasePath
-                  src="assets/img/flags/de.png"
-                  alt="img"
-                  height={16}
-                />{" "}
-                German
-              </Link>
-            </div>
-          </li> */}
-          {/* /Flag */}
           <li className="nav-item nav-item-box">
             <Link
               to="#"
@@ -424,13 +332,12 @@ const Header = () => {
               <FeatherIcon icon="maximize" />
             </Link>
           </li>
-          <li className="nav-item nav-item-box">
+          {/* <li className="nav-item nav-item-box">
             <Link to="/email">
-              {/* <i data-feather="mail" /> */}
               <FeatherIcon icon="mail" />
               <span className="badge rounded-pill">1</span>
             </Link>
-          </li>
+          </li> */}
           {/* Notifications */}
           <li className="nav-item dropdown nav-item-box">
             <Link
@@ -438,167 +345,61 @@ const Header = () => {
               className="dropdown-toggle nav-link"
               data-bs-toggle="dropdown"
             >
-              {/* <i data-feather="bell" /> */}
               <FeatherIcon icon="bell" />
-              <span className="badge rounded-pill">2</span>
+              {unreadCount > 0 && (
+                <span className="badge rounded-pill">{unreadCount}</span>
+              )}
             </Link>
             <div className="dropdown-menu notifications">
               <div className="topnav-dropdown-header">
                 <span className="notification-title">Notifications</span>
-                <Link to="#" className="clear-noti">
-                  {" "}
-                  Clear All{" "}
-                </Link>
+                <Link to="#" className="clear-noti"> Clear All </Link>
               </div>
               <div className="noti-content">
                 <ul className="notification-list">
-                  <li className="notification-message active">
-                    <Link to="/activities">
-                      <div className="media d-flex">
-                        <span className="avatar flex-shrink-0">
-                          <ImageWithBasePath
-                            alt="img"
-                            src="assets/img/profiles/avatar-02.jpg"
-                          />
-                        </span>
-                        <div className="media-body flex-grow-1">
-                          <p className="noti-details">
-                            <span className="noti-title">John Doe</span> added
-                            new task{" "}
-                            <span className="noti-title">
-                              Patient appointment booking
-                            </span>
-                          </p>
-                          <p className="noti-time">
-                            <span className="notification-time">
-                              4 mins ago
-                            </span>
-                          </p>
+                  {notifications.map(notification => (
+                    <li key={notification.id} 
+                        className={`notification-message ${!notification.isRead ? 'active' : ''}`}
+                        onClick={() => handleNotificationClick(notification.id)}>
+                      <Link to="#">
+                        <div className="media d-flex">
+                          <span className="avatar flex-shrink-0">
+                            {notification.avatar ? (
+                              <ImageWithBasePath alt="img" src={notification.avatar} />
+                            ) : (
+                              <span className="avatar-text">
+                                {notification.title.charAt(0)}
+                              </span>
+                            )}
+                          </span>
+                          <div className="media-body flex-grow-1">
+                            <p className="noti-details">
+                              <span className="noti-title">{notification.title}</span>
+                              {notification.message}
+                            </p>
+                            <p className="noti-time">
+                              <span className="notification-time">
+                                {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                              </span>
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </Link>
-                  </li>
-                  <li className="notification-message">
-                    <Link to="/activities">
-                      <div className="media d-flex">
-                        <span className="avatar flex-shrink-0">
-                          <ImageWithBasePath
-                            alt="img"
-                            src="assets/img/profiles/avatar-03.jpg"
-                          />
-                        </span>
-                        <div className="media-body flex-grow-1">
-                          <p className="noti-details">
-                            <span className="noti-title">Tarah Shropshire</span>{" "}
-                            changed the task name{" "}
-                            <span className="noti-title">
-                              Appointment booking with payment gateway
-                            </span>
-                          </p>
-                          <p className="noti-time">
-                            <span className="notification-time">
-                              6 mins ago
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-                    </Link>
-                  </li>
-                  <li className="notification-message">
-                    <Link to="/activities">
-                      <div className="media d-flex">
-                        <span className="avatar flex-shrink-0">
-                          <ImageWithBasePath
-                            alt="img"
-                            src="assets/img/profiles/avatar-06.jpg"
-                          />
-                        </span>
-                        <div className="media-body flex-grow-1">
-                          <p className="noti-details">
-                            <span className="noti-title">Misty Tison</span>{" "}
-                            added{" "}
-                            <span className="noti-title">Domenic Houston</span>{" "}
-                            and <span className="noti-title">Claire Mapes</span>{" "}
-                            to project{" "}
-                            <span className="noti-title">
-                              Doctor available module
-                            </span>
-                          </p>
-                          <p className="noti-time">
-                            <span className="notification-time">
-                              8 mins ago
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-                    </Link>
-                  </li>
-                  <li className="notification-message">
-                    <Link to="/activities">
-                      <div className="media d-flex">
-                        <span className="avatar flex-shrink-0">
-                          <ImageWithBasePath
-                            alt="img"
-                            src="assets/img/profiles/avatar-17.jpg"
-                          />
-                        </span>
-                        <div className="media-body flex-grow-1">
-                          <p className="noti-details">
-                            <span className="noti-title">Rolland Webber</span>{" "}
-                            completed task{" "}
-                            <span className="noti-title">
-                              Patient and Doctor video conferencing
-                            </span>
-                          </p>
-                          <p className="noti-time">
-                            <span className="notification-time">
-                              12 mins ago
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-                    </Link>
-                  </li>
-                  <li className="notification-message">
-                    <Link to="/activities">
-                      <div className="media d-flex">
-                        <span className="avatar flex-shrink-0">
-                          <ImageWithBasePath
-                            alt="img"
-                            src="assets/img/profiles/avatar-13.jpg"
-                          />
-                        </span>
-                        <div className="media-body flex-grow-1">
-                          <p className="noti-details">
-                            <span className="noti-title">Bernardo Galaviz</span>{" "}
-                            added new task{" "}
-                            <span className="noti-title">
-                              Private chat module
-                            </span>
-                          </p>
-                          <p className="noti-time">
-                            <span className="notification-time">
-                              2 days ago
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-                    </Link>
-                  </li>
+                      </Link>
+                    </li>
+                  ))}
                 </ul>
               </div>
               <div className="topnav-dropdown-footer">
-                <Link to="/activities">View all Notifications</Link>
+                <Link to="/notifications">View all Notifications</Link>
               </div>
             </div>
           </li>
           {/* /Notifications */}
-          <li className="nav-item nav-item-box">
+          {/* <li className="nav-item nav-item-box">
             <Link to="/general-settings">
-              {/* <i data-feather="settings" /> */}
               <FeatherIcon icon="settings" />
             </Link>
-          </li>
+          </li> */}
           <li className="nav-item dropdown has-arrow main-drop">
             <Link
               to="#"
@@ -607,15 +408,20 @@ const Header = () => {
             >
               <span className="user-info">
                 <span className="user-letter">
-                  <ImageWithBasePath
-                    src="assets/img/profiles/avator1.jpg"
-                    alt="img"
-                    className="img-fluid"
-                  />
+                  {getProfileImage() ? (
+                    <img
+                      src={getProfileImage()}
+                      alt="Profile"
+                      className="img-fluid"
+                      crossOrigin="anonymous"
+                    />
+                  ) : (
+                    <span className="avatar-text">{getInitials(getUserDisplayName())}</span>
+                  )}
                 </span>
                 <span className="user-detail">
-                  <span className="user-name">John Smilga</span>
-                  <span className="user-role">Super Admin</span>
+                  <span className="user-name">{getUserDisplayName()}</span>
+                  <span className="user-role">{getUserRole()}</span>
                 </span>
               </span>
             </Link>
@@ -623,27 +429,36 @@ const Header = () => {
               <div className="profilename">
                 <div className="profileset">
                   <span className="user-img">
-                    <ImageWithBasePath
-                      src="assets/img/profiles/avator1.jpg"
-                      alt="img"
-                    />
+                    {getProfileImage() ? (
+                      <img
+                        src={getProfileImage()}
+                        alt="Profile"
+                        crossOrigin="anonymous"
+                      />
+                    ) : (
+                      <span className="avatar-text">{getInitials(getUserDisplayName())}</span>
+                    )}
                     <span className="status online" />
                   </span>
                   <div className="profilesets">
-                    <h6>John Smilga</h6>
-                    <h5>Super Admin</h5>
+                    <h6>{getUserDisplayName()}</h6>
+                    <h5>{getUserRole()}</h5>
                   </div>
                 </div>
                 <hr className="m-0" />
-                <Link className="dropdown-item" to={route.route}>
+                <Link className="dropdown-item" to={route.profile}>
                   <i className="me-2" data-feather="user" /> My Profile
                 </Link>
-                <Link className="dropdown-item" to={route.generalsettings}>
+                {/* <Link className="dropdown-item" to={route.generalsettings}>
                   <i className="me-2" data-feather="settings" />
                   Settings
-                </Link>
+                </Link> */}
                 <hr className="m-0" />
-                <Link className="dropdown-item logout pb-0" to="/signin">
+                <Link 
+                  className="dropdown-item logout pb-0" 
+                  to="#"
+                  onClick={handleLogout}
+                >
                   <ImageWithBasePath
                     src="assets/img/icons/log-out.svg"
                     alt="img"
@@ -673,7 +488,11 @@ const Header = () => {
             <Link className="dropdown-item" to="generalsettings">
               Settings
             </Link>
-            <Link className="dropdown-item" to="signin">
+            <Link 
+              className="dropdown-item" 
+              to="#"
+              onClick={handleLogout}
+            >
               Logout
             </Link>
           </div>

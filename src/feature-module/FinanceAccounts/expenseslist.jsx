@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Breadcrumbs from "../../core/breadcrumbs";
 import { Link } from "react-router-dom";
 import Select from "react-select";
@@ -36,134 +36,8 @@ const ExpensesList = () => {
   const [enableDateFilter, setEnableDateFilter] = useState(false);  // Add this line
   const [editDate, setEditDate] = useState(null);
 
-  useEffect(() => {
-    fetchExpenses();
-    fetchCategories();
-  }, []);
-
-  useEffect(() => {
-    if (expenses.length > 0) {
-      applyFilters();
-    }
-  }, [dateRange, selectedCategory, searchQuery, expenses, enableDateFilter]);
-
-  const fetchExpenses = async () => {
-    try {
-      const response = await fetch('http://localhost:3006/api/expenses');
-      const data = await response.json();
-      if (data.success) {
-        const formattedExpenses = data.expenses.map(expense => ({
-          ...expense,
-          expenseDate: dayjs(expense.expenseDate).format('YYYY-MM-DD'),
-          // Ensure catName and catId are properly set
-          catName: expense.catName || expense.category,
-          catId: expense.catId || parseInt(expense.category)
-        }));
-        setExpenses(formattedExpenses);
-        setFilteredExpenses(formattedExpenses); // Initialize filtered expenses
-      }
-    } catch (error) {
-      console.error('Error fetching expenses:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchCategories = async () => {
-    try {
-      const response = await fetch('http://localhost:3006/api/expense-categories');
-      const data = await response.json();
-      if (data.success) {
-        setCategories(data.categories.map(cat => ({
-          value: cat.id,
-          label: cat.name
-        })));
-      }
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-    }
-  };
-
-  const handleAddExpense = async (expenseData) => {
-    try {
-      const response = await fetch('http://localhost:3006/api/expenses', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(expenseData),
-      });
-      const data = await response.json();
-      if (data.success) {
-        fetchExpenses(); // Refresh the list
-        // Show Toast
-        Swal.fire({
-          icon: 'success',
-          title: 'Expense added successfully!',
-          showConfirmButton: false,
-          timer: 1500
-        });
-        // Close modal
-        document.querySelector('[data-bs-dismiss="modal"]').click();
-      }
-    } catch (error) {
-      console.error('Error adding expense:', error);
-    }
-  };
-
-  const handleEditExpense = async (id, updates) => {
-    try {
-      const response = await fetch(`http://localhost:3006/api/expenses/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updates),
-      });
-      const data = await response.json();
-      if (data.success) {
-        fetchExpenses(); // Refresh the list
-        // Close modal
-        document.querySelector('[data-bs-dismiss="modal"]').click();
-      }
-    } catch (error) {
-      console.error('Error updating expense:', error);
-    }
-  };
-
-  const handleDeleteExpense = async (id) => {
-    try {
-      const response = await fetch(`http://localhost:3006/api/expenses/${id}`, {
-        method: 'DELETE',
-      });
-      const data = await response.json();
-      if (data.success) {
-        fetchExpenses(); // Refresh the list
-      }
-    } catch (error) {
-      console.error('Error deleting expense:', error);
-    }
-  };
-  const handleDateChangeModal = (date) => {
-    setSelectedDateModal(date);
-  };
-  const confirmText = (id) => {
-    Swal.fire({
-      title: "Are you sure?",
-      text: "You won't be able to revert this!",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#3085d6",
-      cancelButtonColor: "#d33",
-      confirmButtonText: "Yes, delete it!"
-    }).then((result) => {
-      if (result.isConfirmed) {
-        handleDeleteExpense(id);
-      }
-    });
-  };
-
-  const applyFilters = () => {
+  // Move applyFilters above its usage in useEffect
+  const applyFilters = useCallback(() => {
     let filtered = [...expenses];
 
     // Search filter
@@ -197,6 +71,133 @@ const ExpensesList = () => {
     }
 
     setFilteredExpenses(filtered);
+  }, [expenses, searchQuery, selectedCategory, enableDateFilter, dateRange]);
+
+  useEffect(() => {
+    fetchExpenses();
+    fetchCategories();
+  }, []);
+
+  useEffect(() => {
+    if (expenses.length > 0) {
+      applyFilters();
+    }
+  }, [dateRange, selectedCategory, searchQuery, expenses, enableDateFilter, applyFilters]);
+
+  const fetchExpenses = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/expenses`);
+      const data = await response.json();
+      if (data.success) {
+        const formattedExpenses = data.expenses.map(expense => ({
+          ...expense,
+          expenseDate: dayjs(expense.expenseDate).format('YYYY-MM-DD'),
+          // Ensure catName and catId are properly set
+          catName: expense.catName || expense.category,
+          catId: expense.catId || parseInt(expense.category)
+        }));
+        setExpenses(formattedExpenses);
+        setFilteredExpenses(formattedExpenses); // Initialize filtered expenses
+      }
+    } catch (error) {
+      console.error('Error fetching expenses:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/expense-categories`);
+      const data = await response.json();
+      if (data.success) {
+        setCategories(data.categories.map(cat => ({
+          value: cat.id,
+          label: cat.name
+        })));
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
+
+  const handleAddExpense = async (expenseData) => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/expenses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(expenseData),
+      });
+      const data = await response.json();
+      if (data.success) {
+        fetchExpenses(); // Refresh the list
+        // Show Toast
+        Swal.fire({
+          icon: 'success',
+          title: 'Expense added successfully!',
+          showConfirmButton: false,
+          timer: 1500
+        });
+        // Close modal
+        document.querySelector('[data-bs-dismiss="modal"]').click();
+      }
+    } catch (error) {
+      console.error('Error adding expense:', error);
+    }
+  };
+
+  const handleEditExpense = async (id, updates) => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/expenses/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      });
+      const data = await response.json();
+      if (data.success) {
+        fetchExpenses(); // Refresh the list
+        // Close modal
+        document.querySelector('[data-bs-dismiss="modal"]').click();
+      }
+    } catch (error) {
+      console.error('Error updating expense:', error);
+    }
+  };
+
+  const handleDeleteExpense = async (id) => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/expenses/${id}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (data.success) {
+        fetchExpenses(); // Refresh the list
+      }
+    } catch (error) {
+      console.error('Error deleting expense:', error);
+    }
+  };
+  const handleDateChangeModal = (date) => {
+    setSelectedDateModal(date);
+  };
+  const confirmText = (id) => {
+    Swal.fire({
+      title: "Are you sure?",
+      text: "You won't be able to revert this!",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#3085d6",
+      cancelButtonColor: "#d33",
+      confirmButtonText: "Yes, delete it!"
+    }).then((result) => {
+      if (result.isConfirmed) {
+        handleDeleteExpense(id);
+      }
+    });
   };
 
   const handleDateRangeChange = (dates) => {
@@ -231,8 +232,9 @@ const ExpensesList = () => {
         <td>{expense.description}</td>
         <td>
           <div>
-            <Link
+            {/* <Link
               className="me-2 p-2 mb-0"
+              disabled
               onClick={() => {
                 const categoryOption = categories.find(cat => cat.label === expense.catName);
                 setEditDate(dayjs(expense.expenseDate));
@@ -245,7 +247,7 @@ const ExpensesList = () => {
               data-bs-target="#edit-units"
             >
               <i data-feather="edit" className="feather-edit" />
-            </Link>
+            </Link> */}
             <Link 
               className="me-3 confirm-text p-2 mb-0" 
               onClick={() => confirmText(expense.id)}
@@ -299,7 +301,7 @@ const ExpensesList = () => {
     const formData = new FormData(e.target);
     
     try {
-      const response = await fetch('http://localhost:3006/api/expense-categories', {
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/expense-categories`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -389,6 +391,7 @@ const ExpensesList = () => {
                       disabled={!enableDateFilter}
                       format="YYYY-MM-DD"
                       style={{ height: '40px' }}
+                      allowEmpty={[true, true]}  // Add this line
                     />
                   </div>
                 </div>

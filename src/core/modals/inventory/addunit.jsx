@@ -8,7 +8,7 @@ const AddUnit = ({ show, onHide, onSubmit }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            const response = await fetch('http://localhost:3006/api/units', {
+            const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/units`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

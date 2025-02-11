@@ -164,13 +164,6 @@
                     @include position(absolute,3px,null,null,-20px);
                 }
             }
-            &:last-child{
-                span{
-                    &:after{
-                        background-color: $danger-700;
-                    }
-                }
-            }
         }
     }
 

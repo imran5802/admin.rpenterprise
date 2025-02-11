@@ -9,24 +9,22 @@ import Chart from "react-apexcharts";
 import { Link } from "react-router-dom";
 import ImageWithBasePath from "../../core/img/imagewithbasebath";
 import { ArrowRight } from "react-feather";
-import { all_routes } from "../../Router/all_routes";
-import withReactContent from "sweetalert2-react-content";
-import Swal from "sweetalert2";
+// import { all_routes } from "../../Router/all_routes";
+// import withReactContent from "sweetalert2-react-content";
+// import Swal from "sweetalert2";
 
 const Dashboard = () => {
-  const route = all_routes;
-  const [chartOptions] = useState({
+  const CHART_COLOR = "#28C76F";  // Define color constant to ensure consistency
+  
+  // const route = all_routes;
+  const [chartData, setChartData] = useState({
     series: [
       {
         name: "Sales",
-        data: [130, 210, 300, 290, 150, 50, 210, 280, 105, 150, 200, 250],
-      },
-      // {
-      //   name: "Purchase",
-      //   data: [-150, -90, -50, -180, -50, -70, -100, -90, -105],
-      // },
+        data: Array(12).fill(0)
+      }
     ],
-    colors: ["#28C76F"],
+    colors: [CHART_COLOR],
     chart: {
       type: "bar",
       height: 320,
@@ -50,9 +48,9 @@ const Dashboard = () => {
       bar: {
         horizontal: false,
         borderRadius: 4,
-        borderRadiusApplication: "end", // "around" / "end"
-        borderRadiusWhenStacked: "all", // "all"/"last"
-        columnWidth: "20%",
+        borderRadiusApplication: "end",
+        borderRadiusWhenStacked: "all",
+        columnWidth: "70%",
       },
     },
     dataLabels: {
@@ -65,18 +63,8 @@ const Dashboard = () => {
     },
     xaxis: {
       categories: [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
       ],
     },
     legend: { show: false },
@@ -84,35 +72,44 @@ const Dashboard = () => {
       opacity: 1,
     },
   });
-  const MySwal = withReactContent(Swal);
-  const showConfirmationAlert = () => {
-    MySwal.fire({
-      title: "Are you sure?",
-      text: "You won't be able to revert this!",
-      showCancelButton: true,
-      confirmButtonColor: "#00ff00",
-      confirmButtonText: "Yes, delete it!",
-      cancelButtonColor: "#ff0000",
-      cancelButtonText: "Cancel",
-    }).then((result) => {
-      if (result.isConfirmed) {
-        MySwal.fire({
-          title: "Deleted!",
-          text: "Your file has been deleted.",
-          className: "btn btn-success",
-          confirmButtonText: "OK",
-          customClass: {
-            confirmButton: "btn btn-success",
-          },
-        });
-      } else {
-        MySwal.close();
-      }
-    });
-  };
+
+  // const MySwal = withReactContent(Swal);
+  // const showConfirmationAlert = () => {
+  //   MySwal.fire({
+  //     title: "Are you sure?",
+  //     text: "You won't be able to revert this!",
+  //     showCancelButton: true,
+  //     confirmButtonColor: "#00ff00",
+  //     confirmButtonText: "Yes, delete it!",
+  //     cancelButtonColor: "#ff0000",
+  //     cancelButtonText: "Cancel",
+  //   }).then((result) => {
+  //     if (result.isConfirmed) {
+  //       MySwal.fire({
+  //         title: "Deleted!",
+  //         text: "Your file has been deleted.",
+  //         className: "btn btn-success",
+  //         confirmButtonText: "OK",
+  //         customClass: {
+  //           confirmButton: "btn btn-success",
+  //         },
+  //       });
+  //     } else {
+  //       MySwal.close();
+  //     }
+  //   });
+  // };
 
   const [recentProducts, setRecentProducts] = useState([]);
-  const [expiredProducts, setExpiredProducts] = useState([]);
+  // const [expiredProducts, setExpiredProducts] = useState([]);
+  const [stats, setStats] = useState({
+    totalSales: 0,
+    totalExpense: 0,
+    totalCustomers: 0,
+    totalInvoices: 0
+  });
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [availableYears, setAvailableYears] = useState([]);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -132,44 +129,131 @@ const Dashboard = () => {
 
         const data = await response.json();
         if (data.success && data.products) {
-          setRecentProducts(data.products.slice(0, 4));
-          setExpiredProducts(data.products.filter(product => 
-            product.productStatus === 'Inactive' || product.productStatus === 'Expired'
-          ).slice(0, 10));
+          setRecentProducts(data.products.slice(data.products.length - 4, data.products.length));
+          // setExpiredProducts(data.products.filter(product => 
+          //   product.productStatus === 'Inactive' || product.productStatus === 'Expired'
+          // ).slice(0, 10));
         }
       } catch (error) {
         console.error('Error fetching products:', error);
         setRecentProducts([]);
-        setExpiredProducts([]);
+        // setExpiredProducts([]);
       }
     };
 
     fetchProducts();
   }, []);
 
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/dashboard/stats`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          mode: 'cors'
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.success) {
+          setStats(data.stats);
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard stats:', error);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  useEffect(() => {
+    const fetchYears = async () => {
+      try {
+        const response = await fetch(
+          `${process.env.REACT_APP_API_BASE_URL}/api/dashboard/years`,
+          {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            mode: 'cors'
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.success && data.years.length > 0) {
+          setAvailableYears(data.years);
+          setSelectedYear(data.years[0]); // Select most recent year
+        }
+      } catch (error) {
+        console.error('Error fetching years:', error);
+      }
+    };
+
+    fetchYears();
+  }, []);
+
+  useEffect(() => {
+    const fetchGraphData = async () => {
+      try {
+        const response = await fetch(
+          `${process.env.REACT_APP_API_BASE_URL}/api/dashboard/graph?year=${selectedYear}`,
+          {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            mode: 'cors'
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.success) {
+          // Find the max value from the data
+          const maxSale = Math.max(...data.data.series[0].data);
+          // Round up to nearest hundred for better visualization
+          const yaxisMax = Math.ceil(maxSale / 100) * 100;
+          
+          setChartData(prev => ({
+            ...prev,
+            series: data.data.series,
+            yaxis: {
+              ...prev.yaxis,
+              min: 0,
+              max: yaxisMax,
+              tickAmount: 5,
+            }
+          }));
+        }
+      } catch (error) {
+        console.error('Error fetching graph data:', error);
+      }
+    };
+
+    fetchGraphData();
+  }, [selectedYear]);
+
   return (
     <div>
       <div className="page-wrapper">
         <div className="content">
           <div className="row">
-            {/* <div className="col-xl-3 col-sm-6 col-12 d-flex">
-              <div className="dash-widget w-100">
-                <div className="dash-widgetimg">
-                  <span>
-                    <ImageWithBasePath
-                      src="assets/img/icons/dash1.svg"
-                      alt="img"
-                    />
-                  </span>
-                </div>
-                <div className="dash-widgetcontent">
-                  <h5>
-                    <CountUp start={0} end={307144} duration={3} prefix="৳" />
-                  </h5>
-                  <h6>Total Purchase Due</h6>
-                </div>
-              </div>
-            </div> */}
             <div className="col-xl-3 col-sm-6 col-12 d-flex">
               <div className="dash-widget dash1 w-100">
                 <div className="dash-widgetimg">
@@ -182,10 +266,10 @@ const Dashboard = () => {
                 </div>
                 <div className="dash-widgetcontent">
                   <h5>
-                    $
+                    ৳
                     <CountUp
                       start={0}
-                      end={4385}
+                      end={stats.totalSales}
                       duration={3} // Duration in seconds
                     />
                   </h5>
@@ -193,30 +277,6 @@ const Dashboard = () => {
                 </div>
               </div>
             </div>
-            {/* <div className="col-xl-3 col-sm-6 col-12 d-flex">
-              <div className="dash-widget dash2 w-100">
-                <div className="dash-widgetimg">
-                  <span>
-                    <ImageWithBasePath
-                      src="assets/img/icons/dash3.svg"
-                      alt="img"
-                    />
-                  </span>
-                </div>
-                <div className="dash-widgetcontent">
-                  <h5>
-                    $
-                    <CountUp
-                      start={0}
-                      end={385656.5}
-                      duration={3} // Duration in seconds
-                      decimals={1}
-                    />
-                  </h5>
-                  <h6>Total Sale Amount</h6>
-                </div>
-              </div>
-            </div> */}
             <div className="col-xl-3 col-sm-6 col-12 d-flex">
               <div className="dash-widget dash3 w-100">
                 <div className="dash-widgetimg">
@@ -229,10 +289,10 @@ const Dashboard = () => {
                 </div>
                 <div className="dash-widgetcontent">
                   <h5>
-                    $
+                    ৳
                     <CountUp
                       start={0}
-                      end={40000}
+                      end={stats.totalExpense}
                       duration={3} // Duration in seconds
                     />
                   </h5>
@@ -243,7 +303,13 @@ const Dashboard = () => {
             <div className="col-xl-3 col-sm-6 col-12 d-flex">
               <div className="dash-count">
                 <div className="dash-counts">
-                  <h4>100</h4>
+                  <h4>
+                    <CountUp
+                      start={0}
+                      end={stats.totalCustomers}
+                      duration={3} // Duration in seconds
+                    />
+                  </h4>
                   <h5>Customers</h5>
                 </div>
                 <div className="dash-imgs">
@@ -251,36 +317,16 @@ const Dashboard = () => {
                 </div>
               </div>
             </div>
-            {/* <div className="col-xl-3 col-sm-6 col-12 d-flex">
-              <div className="dash-count das1">
-                <div className="dash-counts">
-                  <h4>110</h4>
-                  <h5>Suppliers</h5>
-                </div>
-                <div className="dash-imgs">
-                  <UserCheck />
-                </div>
-              </div>
-            </div> */}
-            {/* <div className="col-xl-3 col-sm-6 col-12 d-flex">
-              <div className="dash-count das2">
-                <div className="dash-counts">
-                  <h4>150</h4>
-                  <h5>Purchase Invoice</h5>
-                </div>
-                <div className="dash-imgs">
-                  <ImageWithBasePath
-                    src="assets/img/icons/file-text-icon-01.svg"
-                    className="img-fluid"
-                    alt="icon"
-                  />
-                </div>
-              </div>
-            </div> */}
             <div className="col-xl-3 col-sm-6 col-12 d-flex">
               <div className="dash-count das3">
                 <div className="dash-counts">
-                  <h4>170</h4>
+                  <h4>
+                    <CountUp
+                      start={0}
+                      end={stats.totalInvoices}
+                      duration={3} // Duration in seconds
+                    />
+                  </h4>
                   <h5>Sales Invoice</h5>
                 </div>
                 <div className="dash-imgs">
@@ -299,11 +345,10 @@ const Dashboard = () => {
                   <div className="graph-sets">
                     <ul className="mb-0">
                       <li>
-                        <span>Sales</span>
+                        <span>                          
+                          Sales
+                        </span>
                       </li>
-                      {/* <li>
-                        <span>Purchase</span>
-                      </li> */}
                     </ul>
                     <div className="dropdown dropdown-wraper">
                       <button
@@ -313,17 +358,26 @@ const Dashboard = () => {
                         data-bs-toggle="dropdown"
                         aria-expanded="false"
                       >
-                        2025
+                        {selectedYear}
                       </button>
                       <ul
                         className="dropdown-menu"
                         aria-labelledby="dropdownMenuButton"
                       >
-                        <li>
-                          <Link to="#" className="dropdown-item">
-                          2025
-                          </Link>
-                        </li>
+                        {availableYears.map(year => (
+                          <li key={year}>
+                            <Link
+                              to="#"
+                              className="dropdown-item"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setSelectedYear(year);
+                              }}
+                            >
+                              {year}
+                            </Link>
+                          </li>
+                        ))}
                       </ul>
                     </div>
                   </div>
@@ -331,8 +385,8 @@ const Dashboard = () => {
                 <div className="card-body">
                   <div id="sales_charts" />
                   <Chart
-                    options={chartOptions}
-                    series={chartOptions.series}
+                    options={chartData}
+                    series={chartData.series}
                     type="bar"
                     height={320}
                   />
@@ -367,15 +421,15 @@ const Dashboard = () => {
                           <tr key={product.productID}>
                             <td>{index + 1}</td>
                             <td className="productimgname">
-                              <Link to={route.productlist} className="product-img">
-                                <img
+                              <Link to="#" className="product-img">
+                              <img
                                   src={product.imageUrl?.replace(/^\//, '') || "assets/img/products/stock-img-01.png"}
                                   alt="product"
                                 />
                               </Link>
-                              <Link to={route.productlist}>
+                              <span style={{ wordWrap: 'break-word !important', width: '200px', display: 'flex', whiteSpace: 'normal' }}>
                                 {product.productEnName} ({product.productBnName})
-                              </Link>
+                              </span>
                             </td>
                             <td>৳{product.regularPrice}</td>
                           </tr>
@@ -387,7 +441,7 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
-          <div className="card">
+          {/* <div className="card">
             <div className="card-header">
               <h4 className="card-title">Expired Products</h4>
             </div>
@@ -396,12 +450,6 @@ const Dashboard = () => {
                 <table className="table dashboard-expired-products">
                   <thead>
                     <tr>
-                      <th className="no-sort">
-                        <label className="checkboxs">
-                          <input type="checkbox" id="select-all" />
-                          <span className="checkmarks" />
-                        </label>
-                      </th>
                       <th>Product</th>
                       <th>SKU</th>
                       <th>Manufactured Date</th>
@@ -413,15 +461,9 @@ const Dashboard = () => {
                     {expiredProducts.map((product) => (
                       <tr key={product.productID}>
                         <td>
-                          <label className="checkboxs">
-                            <input type="checkbox" />
-                            <span className="checkmarks" />
-                          </label>
-                        </td>
-                        <td>
                           <div className="productimgname">
                             <Link to="#" className="product-img stock-img">
-                              <ImageWithBasePath
+                              <img
                                 src={product.imageUrl?.replace(/^\//, '') || "assets/img/products/stock-img-01.png"}
                                 alt="product"
                               />
@@ -450,7 +492,7 @@ const Dashboard = () => {
                 </table>
               </div>
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>

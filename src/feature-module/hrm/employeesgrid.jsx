@@ -30,7 +30,7 @@ const EmployeesGrid = () => {
 
   const fetchEmployees = async () => {
     try {
-      const response = await fetch("http://localhost:3006/api/employees");
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/employees`);
       const data = await response.json();
       if (data.success) {
         setEmployees(data.employees);

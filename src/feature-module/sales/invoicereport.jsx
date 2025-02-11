@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { OverlayTrigger, Tooltip } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import ImageWithBasePath from "../../core/img/imagewithbasebath";
@@ -75,7 +75,7 @@ const InvoiceReport = () => {
   // 5. Data fetching and filtering
   const fetchSales = async () => {
     try {
-      const response = await fetch("http://localhost:3006/api/sales");
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/sales`);
       const data = await response.json();
       if (data.success) {
         setSales(data.sales);
@@ -90,7 +90,7 @@ const InvoiceReport = () => {
     }
   };
 
-  const filterSales = () => {
+  const filterSales = useCallback(() => {
     let filtered = [...sales];
 
     if (selectedPaymentStatus?.value && selectedPaymentStatus.value !== "all") {
@@ -116,7 +116,7 @@ const InvoiceReport = () => {
     }
 
     setFilteredSales(filtered);
-  };
+  }, [sales, searchTerm, selectedPaymentStatus]);
 
   // 6. Effects
   useEffect(() => {
@@ -125,7 +125,7 @@ const InvoiceReport = () => {
 
   useEffect(() => {
     filterSales();
-  }, [searchTerm, selectedPaymentStatus, sales]);
+  }, [searchTerm, selectedPaymentStatus, sales, filterSales]);
 
   // 7. Table columns configuration
   const columns = [

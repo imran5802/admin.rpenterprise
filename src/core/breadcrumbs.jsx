@@ -178,6 +178,7 @@ const Breadcrumbs = (props) => {
     );
   } else if (
     location.pathname == "/expense-list" ||
+    location.pathname == "/sales-list" ||
     location.pathname == "/expense-category" ||
     location.pathname == "/customers" ||
     location.pathname == "/warehouse" ||

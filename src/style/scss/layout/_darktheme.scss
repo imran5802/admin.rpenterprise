@@ -59,12 +59,12 @@
         background-color: $black-bg !important;
     }
     body {
-        background-color: $black-bg;
+        background-color: $black-bg !important;
         color: $theme-title;
         &.header-collapse {
             .header {
                 .header-left {
-                    background-color: $black-bg;     
+                    background: $black-bg !important;     
                 }
             }
         }
@@ -86,14 +86,15 @@
             color: $theme-title;
         }
     }
-    background-color: $black-bg;
+    background-color: $black-bg !important;
     color: $theme-title;
     .header {
-        background: $black-bg;
+        background: $black-bg !important;
         border-bottom: 1px solid $navy;
         .header-left {
             border-color: $navy; 
-            border-bottom: 1px solid $navy;      
+            border-bottom: 1px solid $navy;
+            background: $black-bg !important;      
             .logo-normal {
                 display: none;
             }
@@ -105,6 +106,7 @@
     table {
         background: $black-bg;
         --bs-table-bg: transparent;
+        --bs-table-color: $theme-title;
     }
     .sidebar {
         border-right: 1px solid $navy;

@@ -196,7 +196,7 @@ import Coupons from "../feature-module/coupons/coupons";
 
 // My imports
 import PaymentHistory from "../feature-module/sales/paymenthistory";
-
+import DeliveryDashboard from "../feature-module/dashboard/DeliveryDashboard";
 
 import { all_routes } from "./all_routes";
 export const publicRoutes = [
@@ -1390,6 +1390,13 @@ export const publicRoutes = [
     path: routes.paymenthistory,
     name: "paymenthistory",
     element: <PaymentHistory />,
+    route: Route,
+  },
+  {
+    id: 170,
+    path: routes.deliverydashboard,
+    name: "deliverydashboard",
+    element: <DeliveryDashboard />,
     route: Route,
   },
 ];

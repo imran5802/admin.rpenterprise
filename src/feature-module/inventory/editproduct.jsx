@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import MySwal from 'sweetalert2';
@@ -24,12 +24,7 @@ const EditProduct = () => {
   const fileInputRef = useRef(null);
   const [previewImage, setPreviewImage] = useState(null);
 
-  useEffect(() => {
-    console.log('EditProduct mounted, id:', id);
-    fetchProductDetails();
-  }, [id]);
-
-  const fetchProductDetails = async () => {
+  const fetchProductDetails = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -52,7 +47,12 @@ const EditProduct = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    console.log('EditProduct mounted, id:', id);
+    fetchProductDetails();
+  }, [id, fetchProductDetails]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;

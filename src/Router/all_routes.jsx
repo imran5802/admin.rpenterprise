@@ -192,4 +192,5 @@ export const all_routes = {
   coupons:"/coupons",
 
   paymenthistory: "/payment-history",
+  deliverydashboard: "/delivery-dashboard",
 };

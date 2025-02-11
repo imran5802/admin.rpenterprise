@@ -1,5 +1,6 @@
 {
   "name": "admin.rpenterprise",
+  "homepage": "https://admin.rpbazaar.xyz/",
   "version": "0.1.0",
   "private": true,
   "dependencies": {

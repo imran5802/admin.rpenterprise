@@ -74,7 +74,7 @@ const PaymentHistory = () => {
 
   const fetchPayments = async () => {
     try {
-      const response = await fetch("http://localhost:3006/api/payments");
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/payments`);
       const data = await response.json();
       if (data.success) {
         setPayments(data.payments);
@@ -102,7 +102,7 @@ const PaymentHistory = () => {
   const handleDeleteConfirm = async () => {
     try {
       const response = await fetch(
-        `http://localhost:3006/api/payments/${selectedPaymentId}`,
+        `${process.env.REACT_APP_API_BASE_URL}/api/payments/${selectedPaymentId}`,
         {
           method: "DELETE",
         }

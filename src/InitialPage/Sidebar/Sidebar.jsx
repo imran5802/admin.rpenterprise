@@ -2,7 +2,7 @@ import React, { useState, useCallback, memo } from "react";
 import PropTypes from 'prop-types';
 import Scrollbars from "react-custom-scrollbars-2";
 import { Link, useLocation } from "react-router-dom";
-import { SidebarData } from "../../core/json/siderbar_data";
+import { getSidebarData } from "../../core/json/siderbar_data";
 import HorizontalSidebar from "./horizontalSidebar";
 import CollapsedSidebar from "./collapsedSidebar";
 
@@ -142,6 +142,8 @@ const Sidebar = () => {
     });
   }, [location.pathname]);
 
+  const sidebarData = getSidebarData();
+
   return (
     <div>
       <div className="sidebar" id="sidebar">
@@ -149,7 +151,7 @@ const Sidebar = () => {
           <div className="sidebar-inner slimscroll">
             <div id="sidebar-menu" className="sidebar-menu">
               <ul>
-                {SidebarData?.map((mainLabel, index) => (
+                {sidebarData?.map((mainLabel, index) => (
                   <li className="submenu-open" key={index}>
                     <h6 className="submenu-hdr">{mainLabel.label}</h6>
                     <ul>

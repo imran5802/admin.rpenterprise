@@ -1,15 +1,9 @@
-import React, { useState, useEffect } from "react";
-import { Button, OverlayTrigger, Tooltip } from "react-bootstrap";
+import React, { useState, useEffect, useCallback } from "react";
+import { Button } from "react-bootstrap";
+import Breadcrumbs from "../../core/breadcrumbs";
 import { Link } from "react-router-dom";
 import ImageWithBasePath from "../../core/img/imagewithbasebath";
-import {
-  ChevronUp,
-  RotateCcw,
-  StopCircle,
-  Map,
-} from "feather-icons-react/build/IconComponents";
-import { setToogleHeader } from "../../core/redux/action";
-import { useDispatch, useSelector } from "react-redux";
+import { StopCircle, Map, X } from "feather-icons-react/build/IconComponents";
 import Select from "react-select";
 import { DatePicker } from "antd";
 import Swal from "sweetalert2";
@@ -25,9 +19,7 @@ const formatDate = (dateString) => {
 };
 
 const SalesList = () => {
-  const dispatch = useDispatch();
   const [showModal, setShowModal] = useState(false);
-  const data = useSelector((state) => state.toggle_header);
   const [sales, setSales] = useState([]);
   const [filteredSales, setFilteredSales] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,33 +35,94 @@ const SalesList = () => {
     value: "all",
     label: "All",
   });
+  const [customers, setCustomers] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [selectedProducts, setSelectedProducts] = useState([]);
+  const [tempProduct, setTempProduct] = useState(null);
+  const [tempQuantity, setTempQuantity] = useState(1);
+  const [tempPrice, setTempPrice] = useState(0);
+  const [discount, setDiscount] = useState(0);
 
   useEffect(() => {
-    fetchSales();
+    fetchCustomers();
+    fetchProducts();
   }, []);
 
-  const fetchSales = async () => {
+  const fetchCustomers = async () => {
     try {
-      const response = await fetch("http://localhost:3006/api/sales");
+      const response = await fetch(
+        `${process.env.REACT_APP_API_BASE_URL}/api/customers`
+      );
       const data = await response.json();
       if (data.success) {
-        setSales(data.sales);
-        setFilteredSales(data.sales);
-      } else {
-        setError("Failed to fetch sales data");
+        setCustomers(data.customers);
       }
     } catch (err) {
-      setError("Error connecting to server");
-    } finally {
-      setLoading(false);
+      console.error("Error fetching customers:", err);
     }
   };
 
-  useEffect(() => {
-    filterSales();
-  }, [searchTerm, selectedStatus, selectedPaymentStatus, sales]);
+  const fetchProducts = async () => {
+    try {
+      const response = await fetch(
+        `${process.env.REACT_APP_API_BASE_URL}/api/products`
+      );
+      const data = await response.json();
+      if (data.success) {
+        setProducts(data.products);
+      }
+    } catch (err) {
+      console.error("Error fetching products:", err);
+    }
+  };
 
-  const filterSales = () => {
+  // Modified Add Product handler: alert user if the same product is already added
+  const handleAddProduct = (product) => {
+    // First check if quantity and price are valid
+    if (tempQuantity <= 0 || tempPrice <= 0) {
+        alert("Quantity and price must be greater than 0.");
+        return;
+    }
+
+    // Check if product is already in the list
+    const existingProductIndex = selectedProducts.findIndex(p => p.productID === product.productID);
+
+    if (existingProductIndex !== -1) {
+        // Product exists - show alert
+        alert("Product Already Added");
+        return;
+    }
+
+    // Add new product
+    setSelectedProducts([
+        ...selectedProducts,
+        {
+            ...product,
+            quantity: tempQuantity,
+            price: tempPrice
+        }
+    ]);
+
+    // Reset temp values
+    setTempProduct(null);
+    setTempQuantity(1);
+    setTempPrice(0);
+};
+
+  const handleProductQuantityChange = (index, quantity) => {
+    const updatedProducts = [...selectedProducts];
+    updatedProducts[index].quantity = quantity;
+    setSelectedProducts(updatedProducts);
+  };
+
+  const handleRemoveProduct = (index) => {
+    const updatedProducts = [...selectedProducts];
+    updatedProducts.splice(index, 1);
+    setSelectedProducts(updatedProducts);
+  };
+
+  const filterSales = useCallback(() => {
     let filtered = [...sales];
 
     // Filter by order status
@@ -104,52 +157,79 @@ const SalesList = () => {
     }
 
     setFilteredSales(filtered);
+  }, [sales, searchTerm, selectedStatus, selectedPaymentStatus]);
+
+  useEffect(() => {
+    filterSales();
+  }, [filterSales]);
+
+  useEffect(() => {
+    fetchSales();
+  }, []);
+
+  const fetchSales = async () => {
+    try {
+      const response = await fetch(
+        `${process.env.REACT_APP_API_BASE_URL}/api/sales`
+      );
+      const data = await response.json();
+      if (data.success) {
+        setSales(data.sales);
+        setFilteredSales(data.sales);
+      } else {
+        setError("Failed to fetch sales data");
+      }
+    } catch (err) {
+      setError("Error connecting to server");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSearchChange = (event) => {
     setSearchTerm(event.target.value);
   };
 
-const handleStatusUpdate = async (orderId, newStatus) => {
+  const handleStatusUpdate = async (orderId, newStatus) => {
     if (newStatus === "Cancelled") {
-        const result = await Swal.fire({
-            title: "Are you sure?",
-            text: "Do you really want to cancel this order?",
-            icon: "warning",
-            showCancelButton: true,
-            confirmButtonText: "Yes, cancel it!",
-            cancelButtonText: "No, keep it",
-        });
+      const result = await Swal.fire({
+        title: "Are you sure?",
+        text: "Do you really want to cancel this order?",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Yes, cancel it!",
+        cancelButtonText: "No, keep it",
+      });
 
-        if (!result.isConfirmed) {
-            return;
-        }
+      if (!result.isConfirmed) {
+        return;
+      }
     }
 
     try {
-        const response = await fetch(
-            `http://localhost:3006/api/sales/${orderId}/status`,
-            {
-                method: "PATCH",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ status: newStatus }),
-            }
-        );
-        const data = await response.json();
-        if (data.success) {
-            fetchSales();
+      const response = await fetch(
+        `${process.env.REACT_APP_API_BASE_URL}/api/sales/${orderId}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ status: newStatus }),
         }
+      );
+      const data = await response.json();
+      if (data.success) {
+        fetchSales();
+      }
     } catch (err) {
-        console.error("Error updating status:", err);
+      console.error("Error updating status:", err);
     }
-};
+  };
 
   const handleReceivePayment = async (orderId, formData) => {
     try {
       const response = await fetch(
-        `http://localhost:3006/api/sales/${orderId}/payment`,
+        `${process.env.REACT_APP_API_BASE_URL}/api/sales/${orderId}/payment`,
         {
           method: "POST",
           headers: {
@@ -250,31 +330,95 @@ const handleStatusUpdate = async (orderId, newStatus) => {
     { value: "Partial", label: "Partial" },
   ];
 
-  const renderTooltip = (props) => (
-    <Tooltip id="pdf-tooltip" {...props}>
-      Pdf
-    </Tooltip>
-  );
-  const renderExcelTooltip = (props) => (
-    <Tooltip id="excel-tooltip" {...props}>
-      Excel
-    </Tooltip>
-  );
-  const renderPrinterTooltip = (props) => (
-    <Tooltip id="printer-tooltip" {...props}>
-      Printer
-    </Tooltip>
-  );
-  const renderRefreshTooltip = (props) => (
-    <Tooltip id="refresh-tooltip" {...props}>
-      Refresh
-    </Tooltip>
-  );
-  const renderCollapseTooltip = (props) => (
-    <Tooltip id="refresh-tooltip" {...props}>
-      Collapse
-    </Tooltip>
-  );
+  const handleDiscountChange = (e) => {
+    setDiscount(Number(e.target.value));
+  };
+
+  const handleAddSubmit = async (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const totalAmount = selectedProducts.reduce(
+      (sum, p) => sum + p.quantity * p.price,
+      0
+    );
+    const discountAmount = parseFloat(
+      document.querySelector('input[name="discountAmount"]')?.value || "0"
+    );
+
+    //const customerID = formData.get("customerID"); // Removed
+
+    // Check if customer is selected
+    if (!selectedCustomer) { // Modified
+      Swal.fire({
+        title: "Error!",
+        text: "Please select a customer.",
+        icon: "error",
+        confirmButtonText: "OK",
+      });
+      return;
+    }
+
+    const newSale = {
+      orderDate: new Date(),
+      totalAmount,
+      discountAmount,
+      orderStatus: "Confirmed",
+      customerID: selectedCustomer.value || 0, // Get the selected customer ID // Modified
+      shippingAddress: formData.get("shippingAddress"),
+      plusCode: "",
+      latitude: 0,
+      longitude: 0,
+      paymentMethod: "Cash on Delivery",
+      paymentStatus: "Unpaid",
+      products: selectedProducts.map((product) => ({
+      productID: product.productID,
+      quantity: product.quantity,
+      price: product.price,
+      })),
+    };
+
+    try {
+      const response = await fetch(
+        `${process.env.REACT_APP_API_BASE_URL}/api/sales`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(newSale),
+        }
+      );
+      const data = await response.json();
+      if (data.success) {
+        Swal.fire({
+          title: "Success!",
+          text: "Sale has been added successfully.",
+          icon: "success",
+          confirmButtonText: "OK",
+        }).then((result) => {
+          if (result.isConfirmed) {
+            fetchSales();
+            document.querySelector("#add-units .btn-close").click();
+          }
+        });
+      } else {
+        Swal.fire({
+          title: "Error!",
+          text: data.error || "Failed to add sale.", // Display server error
+          icon: "error",
+          confirmButtonText: "OK",
+        });
+      }
+    } catch (err) {
+      console.error("Error adding sale:", err);
+      Swal.fire({
+        title: "Error!",
+        text: err.message || "An error occurred while adding the sale.", // Display client error
+        icon: "error",
+        confirmButtonText: "OK",
+      });
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -292,65 +436,11 @@ const handleStatusUpdate = async (orderId, newStatus) => {
     <div>
       <div className="page-wrapper">
         <div className="content">
-          <div className="page-header">
-            <div className="add-item d-flex">
-              <div className="page-title">
-                <h4>Sales List</h4>
-                <h6>Manage Your Sales</h6>
-              </div>
-            </div>
-            <ul className="table-top-head">
-              <li>
-                <OverlayTrigger placement="top" overlay={renderTooltip}>
-                  <Link>
-                    <ImageWithBasePath
-                      src="assets/img/icons/pdf.svg"
-                      alt="img"
-                    />
-                  </Link>
-                </OverlayTrigger>
-              </li>
-              <li>
-                <OverlayTrigger placement="top" overlay={renderExcelTooltip}>
-                  <Link data-bs-toggle="tooltip" data-bs-placement="top">
-                    <ImageWithBasePath
-                      src="assets/img/icons/excel.svg"
-                      alt="img"
-                    />
-                  </Link>
-                </OverlayTrigger>
-              </li>
-              <li>
-                <OverlayTrigger placement="top" overlay={renderPrinterTooltip}>
-                  <Link data-bs-toggle="tooltip" data-bs-placement="top">
-                    <i data-feather="printer" className="feather-printer" />
-                  </Link>
-                </OverlayTrigger>
-              </li>
-              <li>
-                <OverlayTrigger placement="top" overlay={renderRefreshTooltip}>
-                  <Link data-bs-toggle="tooltip" data-bs-placement="top">
-                    <RotateCcw />
-                  </Link>
-                </OverlayTrigger>
-              </li>
-              <li>
-                <OverlayTrigger placement="top" overlay={renderCollapseTooltip}>
-                  <Link
-                    data-bs-toggle="tooltip"
-                    data-bs-placement="top"
-                    id="collapse-header"
-                    className={data ? "active" : ""}
-                    onClick={() => {
-                      dispatch(setToogleHeader(!data));
-                    }}
-                  >
-                    <ChevronUp />
-                  </Link>
-                </OverlayTrigger>
-              </li>
-            </ul>
-          </div>
+          <Breadcrumbs
+            maintitle="Sales List"
+            subtitle="Manage Your Sales"
+            addButton="Add New Sales"
+          />
           {/* /product list */}
           <div className="card table-list-card">
             <div className="card-body">
@@ -434,16 +524,18 @@ const handleStatusUpdate = async (orderId, newStatus) => {
                       filteredSales.map((sale) => (
                         <tr key={sale.orderID}>
                           <td>
-                            <p>{sale.orderNumber}</p>
-                            <Button
-                              className="btn-sm btn-primary"
-                              data-bs-toggle="modal"
-                              data-bs-target="#sales-details-new"
-                              onClick={() => handleDetailsClick(sale.orderID)}
-                            >
-                              <i className="fa-solid fa-circle-info me-1"></i>{" "}
-                              Details
-                            </Button>
+                            <div>
+                              <p>{sale.orderNumber}</p>
+                              <Button
+                                className="btn-sm btn-primary"
+                                data-bs-toggle="modal"
+                                data-bs-target="#sales-details-new"
+                                onClick={() => handleDetailsClick(sale.orderID)}
+                              >
+                                <i className="fa-solid fa-circle-info me-1"></i>{" "}
+                                Details
+                              </Button>
+                            </div>
                           </td>
                           <td>
                             <div className="customer-info">
@@ -509,7 +601,9 @@ const handleStatusUpdate = async (orderId, newStatus) => {
                                   : "badge-danger"
                               }`}
                             >
-                              {sale.orderStatus === "Cancelled" ? "Cancelled" : sale.paymentStatus}
+                              {sale.orderStatus === "Cancelled"
+                                ? "Cancelled"
+                                : sale.paymentStatus}
                             </span>
                           </td>
                           <td className="text-center">
@@ -554,7 +648,10 @@ const handleStatusUpdate = async (orderId, newStatus) => {
                                     }}
                                     data-bs-toggle="modal"
                                     data-bs-target="#createpayment"
-                                    disabled={sale.paymentStatus === "Paid" || sale.orderStatus === "Cancelled"}
+                                    disabled={
+                                      sale.paymentStatus === "Paid" ||
+                                      sale.orderStatus === "Cancelled"
+                                    }
                                   >
                                     Receive Payment
                                   </button>
@@ -574,11 +671,254 @@ const handleStatusUpdate = async (orderId, newStatus) => {
         </div>
       </div>
       <>
+        {/* Add Sales */}
+        <div className="modal fade" id="add-units" data-bs-backdrop="static">
+          <div className="modal-dialog modal-dialog-centered custom-modal-two modal-lg">
+            <div className="modal-content">
+              <div className="page-wrapper-new p-0">
+                <div className="content">
+                  <div className="modal-header border-0 custom-modal-header">
+                    <div className="page-title">
+                      <h4>Add Sales</h4>
+                      <button
+                        type="button"
+                        className="btn-close position-absolute"
+                        style={{ right: "20px", top: "20px" }}
+                        data-bs-dismiss="modal"
+                        aria-label="Close"
+                      >
+                        <X className="info-img" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="modal-body custom-modal-body">
+                    <form onSubmit={handleAddSubmit}>
+                      <div className="row">
+                        <div className="col-lg-6">
+                          <div className="mb-3">
+                            <label className="form-label">Customer</label>
+                            <Select
+                              className="select"
+                              options={customers.map((customer) => ({
+                                value: customer.userId,
+                                label: customer.userName,
+                              }))}
+                              placeholder="Select Customer"
+                              onChange={setSelectedCustomer}
+                              required
+                            />
+                          </div>
+                        </div>
+                        <div className="col-lg-12">
+                          <div className="mb-3">
+                            <label className="form-label">
+                              Shipping Address
+                            </label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              name="shippingAddress"
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div className="col-lg-12">
+                          <div className="mb-3">
+                            <label className="form-label">Products</label>
+                            <Select
+                              className="select"
+                              options={products.map((product) => ({
+                                value: product.productID,
+                                label: product.productEnName,
+                              }))}
+                              placeholder="Select Product"
+                              value={tempProduct}
+                              onChange={(option) => {
+                                setTempProduct(option);
+                                const prod = products.find(
+                                  (p) => p.productID === option.value
+                                );
+                                setTempPrice(prod ? prod.regularPrice : 0);
+                              }}
+                            />
+                          </div>
+                          <div className="row">
+                            <div className="col-md-6">
+                              <div className="mb-3">
+                                <label className="form-label">Quantity</label>
+                                <input
+                                  type="number"
+                                  className="form-control"
+                                  value={tempQuantity}
+                                  min="1"
+                                  onChange={(e) =>
+                                    setTempQuantity(parseInt(e.target.value))
+                                  }
+                                />
+                              </div>
+                            </div>
+                            <div className="col-md-6">
+                              <div className="mb-3">
+                                <label className="form-label">Price</label>
+                                <input
+                                  type="number"
+                                  className="form-control"
+                                  value={tempPrice}
+                                  min="1"
+                                  step="1"
+                                  onChange={(e) =>
+                                    setTempPrice(parseFloat(e.target.value))
+                                  }
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mb-3">
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              onClick={() => {
+                                if (tempProduct) {
+                                  handleAddProduct({
+                                    productID: tempProduct.value,
+                                    productEnName: tempProduct.label,
+                                    quantity: tempQuantity,
+                                    price: tempPrice,
+                                  });
+                                  // Optionally, reset temp fields here:
+                                  setTempProduct(null);
+                                  setTempQuantity(1);
+                                  setTempPrice(0);
+                                }
+                              }}
+                            >
+                              Add Product
+                            </button>
+                          </div>
+                        </div>
+                        <div className="col-lg-12">
+                          <div className="mb-3">
+                            <label className="form-label">
+                              Selected Products
+                            </label>
+                            <table className="table">
+                              <thead>
+                                <tr>
+                                  <th>Product Name</th>
+                                  <th>Quantity</th>
+                                  <th>Item Total</th>
+                                  <th>Action</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {selectedProducts.map((product, index) => (
+                                  <tr key={product.productID}>
+                                    <td>{product.productEnName}</td>
+                                    <td>
+                                      <input
+                                        type="number"
+                                        value={product.quantity}
+                                        min="1"
+                                        onChange={(e) =>
+                                          handleProductQuantityChange(
+                                            index,
+                                            parseInt(e.target.value)
+                                          )
+                                        }
+                                      />
+                                    </td>
+                                    <td>
+                                      {(
+                                        product.quantity * product.price
+                                      ).toFixed(2)}
+                                    </td>
+                                    <td>
+                                      <button
+                                        type="button"
+                                        className="btn btn-danger btn-sm"
+                                        onClick={() =>
+                                          handleRemoveProduct(index)
+                                        }
+                                      >
+                                        <i className="fa-solid fa-trash"></i>
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr>
+                                  <td colSpan="2" className="text-end">Memo Total =</td>
+                                  <td>
+                                    {selectedProducts
+                                      .reduce(
+                                        (sum, p) => sum + p.quantity * p.price,
+                                        0
+                                      )
+                                      .toFixed(2)}
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td colSpan="2" className="text-end">Discount =</td>
+                                  <td>
+                                    <input
+                                      type="number"
+                                      name="discountAmount"
+                                      defaultValue="0"
+                                      step="1"
+                                      value={discount}
+                                      onChange={handleDiscountChange}
+                                      placeholder="Discount"
+                                    />
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td colSpan="2" className="text-end">Grand Total =</td>
+                                  <td>
+                                    {(
+                                      selectedProducts.reduce(
+                                        (sum, p) => sum + p.quantity * p.price,
+                                        0
+                                      ) -
+                                      parseFloat(
+                                        document.querySelector(
+                                          'input[name="discountAmount"]'
+                                        )?.value || "0"
+                                      )
+                                    ).toFixed(2)}
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="modal-footer-btn">
+                        <Link
+                          to="#"
+                          className="btn btn-cancel me-2"
+                          data-bs-dismiss="modal"
+                        >
+                          Cancel
+                        </Link>
+                        <button type="submit" className="btn btn-submit">
+                          Submit
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* /Add Expense */}
         {/* details popup */}
         <div className="modal fade" id="sales-details-new">
           <div className="modal-dialog modal-lg">
             <div className="modal-content">
-              <div className="page-wrapper details-blk">
+              <div className="details-blk">
                 <div className="content p-0">
                   <div className="page-header p-4 mb-0">
                     <div className="add-item d-flex">
@@ -589,18 +929,6 @@ const handleStatusUpdate = async (orderId, newStatus) => {
                       </div>
                     </div>
                     <ul className="table-top-head">
-                      <li>
-                        <Link
-                          data-bs-toggle="tooltip"
-                          data-bs-placement="top"
-                          title="Pdf"
-                        >
-                          <i
-                            data-feather="edit"
-                            className="action-edit sales-action"
-                          />
-                        </Link>
-                      </li>
                       <li>
                         <Link
                           data-bs-toggle="tooltip"
@@ -633,7 +961,7 @@ const handleStatusUpdate = async (orderId, newStatus) => {
                         >
                           <i
                             data-feather="printer"
-                            className="feather-rotate-ccw"
+                            className="feather-printer"
                           />
                         </Link>
                       </li>
@@ -840,7 +1168,8 @@ const handleStatusUpdate = async (orderId, newStatus) => {
                               step="0.01"
                               defaultValue={
                                 selectedOrderDetails
-                                  ? selectedOrderDetails.totalAmount - selectedOrderDetails.discountAmount
+                                  ? selectedOrderDetails.totalAmount -
+                                    selectedOrderDetails.discountAmount
                                   : ""
                               }
                             />
@@ -886,12 +1215,18 @@ const handleStatusUpdate = async (orderId, newStatus) => {
                               className="form-control"
                               required
                               step="1"
-                              max={selectedOrderDetails
-                                ? selectedOrderDetails.totalAmount - selectedOrderDetails.discountAmount - selectedOrderDetails.paidAmount
-                                : "0.00"}
+                              max={
+                                selectedOrderDetails
+                                  ? selectedOrderDetails.totalAmount -
+                                    selectedOrderDetails.discountAmount -
+                                    selectedOrderDetails.paidAmount
+                                  : "0.00"
+                              }
                               defaultValue={
                                 selectedOrderDetails
-                                  ? selectedOrderDetails.totalAmount - selectedOrderDetails.discountAmount - selectedOrderDetails.paidAmount
+                                  ? selectedOrderDetails.totalAmount -
+                                    selectedOrderDetails.discountAmount -
+                                    selectedOrderDetails.paidAmount
                                   : ""
                               }
                             />
@@ -961,7 +1296,7 @@ const handleStatusUpdate = async (orderId, newStatus) => {
           </div>
         </div>
         {/* Create payment Modal */}
-        
+
         <div className="customizer-links" id="setdata">
           <ul className="sticky-sidebar">
             <li className="sidebar-icons">

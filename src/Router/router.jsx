@@ -2,16 +2,14 @@ import React from "react";
 import { Route, Routes, Navigate } from "react-router-dom";
 import Header from "../InitialPage/Sidebar/Header";
 import Sidebar from "../InitialPage/Sidebar/Sidebar";
-import { pagesRoute, posRoutes, publicRoutes } from "./router.link";
+import { pagesRoute, publicRoutes } from "./router.link"; // Remove posRoutes if unused
 import { Outlet } from "react-router-dom";
 import { useSelector } from "react-redux";
 import ThemeSettings from "../InitialPage/themeSettings";
-// import CollapsedSidebar from "../InitialPage/Sidebar/collapsedSidebar";
 import Loader from "../feature-module/loader/loader";
 import Dashboard from "../feature-module/dashboard/Dashboard";
-
-// import HorizontalSidebar from "../InitialPage/Sidebar/horizontalSidebar";
-//import LoadingSpinner from "../InitialPage/Sidebar/LoadingSpinner";
+import ProtectedRoute from '../components/ProtectedRoute';
+import Signin from '../feature-module/pages/login/signin'; // Add Signin import
 
 const AllRoutes = () => {
   const data = useSelector((state) => state.toggle_header);
@@ -41,32 +39,23 @@ const AllRoutes = () => {
     </div>
   );
 
-  const Pospages = () => (
+  // Remove or comment out Pospages if unused
+  /* const Pospages = () => (
     <div>
       <Header />
       <Outlet />
       <Loader />
       <ThemeSettings />
     </div>
-  );
-  
+  ); */
 
   return (
     <div>
       <Routes>
-        {/* POS routes */}
-        <Route path="/pos/*" element={<Pospages />}>
-          {posRoutes.map((route, id) => (
-            <Route 
-              key={id}
-              path={route.path.replace('/pos', '')} 
-              element={route.element}
-            />
-          ))}
-        </Route>
-
-        {/* Auth pages - no /* to make it a separate route group */}
+        {/* Move auth routes first for proper handling */}
         <Route path="/auth/*" element={<Authpages />}>
+          <Route path="signin" element={<Signin />} />
+          {/* Other auth routes */}
           {pagesRoute.map((route, id) => (
             <Route 
               key={id}
@@ -76,13 +65,18 @@ const AllRoutes = () => {
           ))}
         </Route>
 
-        {/* Main routes - make this the last route to catch all other paths */}
-        <Route path="/" element={<HeaderLayout />}>
+        {/* Protected routes */}
+        <Route 
+          path="/*" 
+          element={
+            <ProtectedRoute>
+              <HeaderLayout />
+            </ProtectedRoute>
+          }
+        >
           <Route index element={<Dashboard />} />
           {publicRoutes.map((route, id) => {
-            // Skip the root path since we already have an index route
             if (route.path === "/") return null;
-            
             return (
               <Route 
                 key={id}
@@ -91,9 +85,10 @@ const AllRoutes = () => {
               />
             );
           })}
-          {/* Catch all route */}
-          <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
+
+        {/* Catch all redirect */}
+        <Route path="*" element={<Navigate to="/auth/signin" replace />} />
       </Routes>
     </div>
   );

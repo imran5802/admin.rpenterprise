@@ -21,20 +21,25 @@ const ThemeSettings = () => {
     localStorage.getItem("layoutThemeColors")
   );
 
+  const [isDarkMode, setIsDarkMode] = useState(
+    localStorage.getItem("colorschema") === "dark_mode"
+  );
+
   const showSettings = () => {
     setShow(!show);
   };
 
   const DarkThemes = () => {
     localStorage.setItem("colorschema", "dark_mode");
-    console.log("check dark mode");
     setlayoutColor("dark_mode");
+    setIsDarkMode(true);
     document.documentElement.setAttribute("data-layout-mode", "dark_mode");
   };
 
   const LightThemes = () => {
     localStorage.setItem("colorschema", "light_mode");
     setlayoutColor("light_mode");
+    setIsDarkMode(false);
     document.documentElement.setAttribute("data-layout-mode", "light_mode");
   };
 
@@ -170,8 +175,9 @@ const ThemeSettings = () => {
                               name="theme-mode"
                               id="light_mode"
                               className="check color-check stylemode lmode"
-                              defaultValue="light_mode"
-                              defaultChecked
+                              value="light_mode"
+                              checked={!isDarkMode}
+                              onChange={LightThemes}
                             />
                             <label
                               htmlFor="light_mode"
@@ -196,7 +202,9 @@ const ThemeSettings = () => {
                               name="theme-mode"
                               id="dark_mode"
                               className="check color-check stylemode"
-                              defaultValue="dark_mode"
+                              value="dark_mode"
+                              checked={isDarkMode}
+                              onChange={DarkThemes}
                             />
                             <label htmlFor="dark_mode" className="checktoggles">
                               <div onClick={DarkThemes}>
@@ -214,64 +222,6 @@ const ThemeSettings = () => {
                     </div>
                   </div>
                   <div className="theme-mode border-0">
-                    <div className="theme-head">
-                      <h6>Direction</h6>
-                      <p>Select the direction for your app.</p>
-                    </div>
-                    <div className="row">
-                      <div className="col-xl-6 ere">
-                        <div className="layout-wrap">
-                          <div className="d-flex align-items-center">
-                            <div className="status-toggle d-flex align-items-center me-2">
-                              <input
-                                type="radio"
-                                name="direction"
-                                id="ltr"
-                                className="check direction"
-                                defaultValue="ltr"
-                                defaultChecked
-                              />
-                              <label htmlFor="ltr" className="checktoggles">
-                                <Link to="/">
-                                  <ImageWithBasePath
-                                    src="assets/img/theme/theme-img-01.jpg"
-                                    alt=""
-                                  />
-                                </Link>
-                                <span className="theme-name">LTR</span>
-                              </label>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="col-xl-6 ere">
-                        <div className="layout-wrap">
-                          <div className="d-flex align-items-center">
-                            <div className="status-toggle d-flex align-items-center me-2">
-                              <input
-                                type="radio"
-                                name="direction"
-                                id="rtl"
-                                className="check direction"
-                                defaultValue="rtl"
-                              />
-                              <label htmlFor="rtl" className="checktoggles">
-                                <Link
-                                  to="https://dreamspos.dreamstechnologies.com/react/template-rtl/"
-                                  target="_blank"
-                                >
-                                  <ImageWithBasePath
-                                    src="assets/img/theme/theme-img-03.jpg"
-                                    alt=""
-                                  />
-                                </Link>
-                                <span className="theme-name">RTL</span>
-                              </label>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
                     <div className="theme-mode border-0 mb-0">
                       <div className="theme-head">
                         <h6>Layout Mode</h6>
@@ -504,28 +454,6 @@ const ThemeSettings = () => {
                             </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="sidebar-footer">
-                  <div className="row">
-                    <div className="col-xl-6">
-                      <div className="footer-preview-btn">
-                        <button
-                          type="button"
-                          className="btn btn-secondary w-100"
-                          onClick={ResetData}
-                        >
-                          Reset
-                        </button>
-                      </div>
-                    </div>
-                    <div className="col-xl-6">
-                      <div className="footer-reset-btn">
-                        <Link to="#" className="btn btn-primary w-100">
-                          Buy Now
-                        </Link>
                       </div>
                     </div>
                   </div>

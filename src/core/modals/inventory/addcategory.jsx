@@ -17,7 +17,7 @@ const AddCategory = ({ show, onHide }) => {
     setError("");
 
     try {
-      const response = await fetch("http://localhost:3006/api/categories", {
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/categories`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

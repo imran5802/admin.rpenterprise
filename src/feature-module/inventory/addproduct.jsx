@@ -32,7 +32,7 @@ const AddProduct = ({ show, onHide, onSubmit }) => {
 
   const fetchCategories = async () => {
     try {
-      const response = await fetch('http://localhost:3006/api/categories');
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/categories`);
       const data = await response.json();
       if (data.success) {
         setCategoryOptions(data.categories.map(cat => ({
@@ -47,7 +47,7 @@ const AddProduct = ({ show, onHide, onSubmit }) => {
 
   const fetchUnits = async () => {
     try {
-      const response = await fetch('http://localhost:3006/api/units');
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/units`);
       const data = await response.json();
       if (data.success) {
         setUnitOptions(data.units.map(unit => ({
@@ -87,7 +87,7 @@ const AddProduct = ({ show, onHide, onSubmit }) => {
     });
 
     try {
-      const response = await fetch('http://localhost:3006/api/products', {
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/products`, {
         method: 'POST',
         body: formDataToSend
       });

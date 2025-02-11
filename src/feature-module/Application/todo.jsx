@@ -58,7 +58,7 @@ const ToDo = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get('http://localhost:3006/api/todos');
+      const response = await axios.get(`${process.env.REACT_APP_API_BASE_URL}/api/todos`);
       if (response.data.success) {
         setTodos(response.data.todos);
       }
@@ -72,7 +72,7 @@ const ToDo = () => {
 
   const fetchCounts = async () => {
     try {
-      const response = await axios.get('http://localhost:3006/api/todos/counts');
+      const response = await axios.get(`${process.env.REACT_APP_API_BASE_URL}/api/todos/counts`);
       if (response.data.success) {
         setCounts(response.data.counts);
       }
@@ -83,7 +83,7 @@ const ToDo = () => {
 
   const handleAddTodo = async (todoData) => {
     try {
-      const response = await axios.post('http://localhost:3006/api/todos', todoData);
+      const response = await axios.post(`${process.env.REACT_APP_API_BASE_URL}/api/todos`, todoData);
       if (response.data.success) {
         setTodos([response.data.todo, ...todos]);
         fetchCounts(); // Refresh counts
@@ -95,7 +95,7 @@ const ToDo = () => {
 
   const handleUpdateTodo = async (id, updates) => {
     try {
-      const response = await axios.put(`http://localhost:3006/api/todos/${id}`, updates);
+      const response = await axios.put(`${process.env.REACT_APP_API_BASE_URL}/api/todos/${id}`, updates);
       if (response.data.success) {
         setTodos(todos.map(todo => 
           todo.id === id ? { ...todo, ...updates } : todo
@@ -111,13 +111,13 @@ const ToDo = () => {
     try {
       // If in trash view, permanently delete
       if (filter === 'trash') {
-        const response = await axios.delete(`http://localhost:3006/api/todos/${id}/permanent`);
+        const response = await axios.delete(`${process.env.REACT_APP_API_BASE_URL}/api/todos/${id}/permanent`);
         if (response.data.success) {
           setTodos(todos.filter(todo => todo.id !== id));
         }
       } else {
         // Otherwise move to trash
-        const response = await axios.delete(`http://localhost:3006/api/todos/${id}`);
+        const response = await axios.delete(`${process.env.REACT_APP_API_BASE_URL}/api/todos/${id}`);
         if (response.data.success) {
           setTodos(todos.map(todo => 
             todo.id === id ? { ...todo, status: 'deleted' } : todo
@@ -132,7 +132,7 @@ const ToDo = () => {
 
   const handleRestoreTodo = async (id) => {
     try {
-      const response = await axios.patch(`http://localhost:3006/api/todos/${id}/restore`);
+      const response = await axios.patch(`${process.env.REACT_APP_API_BASE_URL}/api/todos/${id}/restore`);
       if (response.data.success) {
         setTodos(todos.map(todo => 
           todo.id === id ? { ...todo, status: 'pending' } : todo
